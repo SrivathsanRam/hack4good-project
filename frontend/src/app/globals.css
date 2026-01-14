@@ -234,6 +234,14 @@ a {
   margin: 18px 0 28px;
 }
 
+.filter-label {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--muted);
+  padding: 6px 4px;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;
@@ -251,6 +259,118 @@ a {
   color: var(--accent-ink);
   border-color: transparent;
   font-weight: 600;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.toolbar-note {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.toggle-group {
+  display: inline-flex;
+  background: #fff;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  padding: 4px;
+  gap: 4px;
+}
+
+.toggle-button {
+  border: none;
+  background: transparent;
+  padding: 8px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.toggle-button.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.calendar-month-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 18px;
+}
+
+.calendar-week-list {
+  display: grid;
+  gap: 16px;
+}
+
+.day-panel,
+.week-row {
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  border: 1px solid var(--line);
+  box-shadow: 0 18px 30px -26px rgba(26, 26, 26, 0.45);
+}
+
+.day-title {
+  font-weight: 700;
+  margin-bottom: 12px;
+  color: var(--sage);
+}
+
+.day-cards,
+.week-cards {
+  display: grid;
+  gap: 12px;
+}
+
+.activity-card {
+  background: #fff;
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  border: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+}
+
+.activity-card h3 {
+  font-size: 1.02rem;
+  margin-bottom: 4px;
+}
+
+.activity-meta {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.activity-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.activity-tag {
+  font-size: 0.78rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #f4efe6;
+  border: 1px solid var(--line);
+}
+
+.activity-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.9rem;
+  color: var(--muted);
 }
 
 .badge {
