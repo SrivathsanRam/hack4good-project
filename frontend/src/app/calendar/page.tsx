@@ -1,7 +1,7 @@
 ﻿'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 type Activity = {
   id: string
@@ -16,85 +16,16 @@ type Activity = {
   cadence: string
 }
 
-const sampleActivities: Activity[] = [
-  {
-    id: 'act-01',
-    title: 'Morning Movement',
-    date: '2024-04-10',
-    time: '09:30',
-    location: 'Studio A',
-    program: 'Movement',
-    role: 'Participants',
-    capacity: 12,
-    seatsLeft: 3,
-    cadence: 'Weekly',
-  },
-  {
-    id: 'act-02',
-    title: 'Creative Collage Lab',
-    date: '2024-04-10',
-    time: '11:00',
-    location: 'Art Room',
-    program: 'Creative',
-    role: 'Participants',
-    capacity: 16,
-    seatsLeft: 6,
-    cadence: 'Weekly',
-  },
-  {
-    id: 'act-03',
-    title: 'Caregiver Circle',
-    date: '2024-04-11',
-    time: '14:00',
-    location: 'Community Lounge',
-    program: 'Caregiver sessions',
-    role: 'Participants',
-    capacity: 10,
-    seatsLeft: 2,
-    cadence: 'Ad hoc',
-  },
-  {
-    id: 'act-04',
-    title: 'Movement Support Volunteer',
-    date: '2024-04-12',
-    time: '09:00',
-    location: 'Studio A',
-    program: 'Movement',
-    role: 'Volunteers',
-    capacity: 4,
-    seatsLeft: 1,
-    cadence: 'Weekly',
-  },
-  {
-    id: 'act-05',
-    title: 'Creative Studio Setup',
-    date: '2024-04-12',
-    time: '10:30',
-    location: 'Art Room',
-    program: 'Creative',
-    role: 'Volunteers',
-    capacity: 6,
-    seatsLeft: 2,
-    cadence: 'Weekly',
-  },
-  {
-    id: 'act-06',
-    title: 'Afternoon Movement',
-    date: '2024-04-13',
-    time: '15:00',
-    location: 'Studio B',
-    program: 'Movement',
-    role: 'Participants',
-    capacity: 14,
-    seatsLeft: 5,
-    cadence: 'Twice weekly',
-  },
-]
+const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
 
 export default function CalendarPage() {
   const [viewMode, setViewMode] = useState<'Month' | 'Week'>('Month')
   const [programFilter, setProgramFilter] = useState('All programs')
   const [roleFilter, setRoleFilter] = useState('All roles')
+  const [activities, setActivities] = useState<Activity[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   const programOptions = [
     'All programs',
@@ -104,14 +35,59 @@ export default function CalendarPage() {
   ]
   const roleOptions = ['All roles', 'Participants', 'Volunteers']
 
+  useEffect(() => {
+    let isActive = true
+
+    const loadActivities = async () => {
+      setIsLoading(true)
+      setError(null)
+      setActivities([])
+
+      try {
+        const response = await fetch(`${apiBase}/api/activities`)
+        if (!response.ok) {
+          throw new Error('Unable to load schedule. Please try again.')
+        }
+        const payload = await response.json()
+        const data = Array.isArray(payload?.data)
+          ? payload.data
+          : Array.isArray(payload?.items)
+            ? payload.items
+            : []
+
+        if (isActive) {
+          setActivities(data)
+        }
+      } catch (loadError) {
+        if (isActive) {
+          const message =
+            loadError instanceof Error
+              ? loadError.message
+              : 'Unable to load schedule. Please try again.'
+          setError(message)
+        }
+      } finally {
+        if (isActive) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    void loadActivities()
+
+    return () => {
+      isActive = false
+    }
+  }, [apiBase, refreshKey])
+
   const filteredActivities = useMemo(() => {
-    return sampleActivities.filter((activity) => {
+    return activities.filter((activity) => {
       const matchesProgram =
         programFilter === 'All programs' || activity.program === programFilter
       const matchesRole = roleFilter === 'All roles' || activity.role === roleFilter
       return matchesProgram && matchesRole
     })
-  }, [programFilter, roleFilter])
+  }, [activities, programFilter, roleFilter])
 
   const groupedByDate = useMemo(() => {
     const groups = new Map<string, Activity[]>()
@@ -136,6 +112,10 @@ export default function CalendarPage() {
       day: 'numeric',
     })
   }
+
+  const statusLabel = isLoading
+    ? 'Loading schedule...'
+    : `${filteredActivities.length} activities matched`
 
   return (
     <div className="container">
@@ -176,9 +156,7 @@ export default function CalendarPage() {
               </button>
             ))}
           </div>
-          <span className="toolbar-note">
-            {filteredActivities.length} activities matched
-          </span>
+          <span className="toolbar-note">{statusLabel}</span>
         </div>
 
         <div className="filters">
@@ -208,7 +186,23 @@ export default function CalendarPage() {
           ))}
         </div>
 
-        {filteredActivities.length === 0 ? (
+        {isLoading ? (
+          <div className="status loading">
+            <span className="spinner" aria-hidden="true" />
+            Loading schedule from the API...
+          </div>
+        ) : error ? (
+          <div className="status error">
+            {error}
+            <button
+              className="button"
+              type="button"
+              onClick={() => setRefreshKey((value) => value + 1)}
+            >
+              Try again
+            </button>
+          </div>
+        ) : filteredActivities.length === 0 ? (
           <div className="empty-state">
             <strong>No activities match those filters</strong>
             <span>Try switching to another program or role.</span>
@@ -285,5 +279,3 @@ export default function CalendarPage() {
     </div>
   )
 }
-
-

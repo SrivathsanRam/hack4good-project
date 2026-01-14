@@ -1,7 +1,7 @@
 ﻿'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
 
 type Activity = {
   id: string
@@ -12,6 +12,8 @@ type Activity = {
   program: string
   seatsLeft: number
   capacity: number
+  cadence?: string
+  description?: string
 }
 
 type FormState = {
@@ -24,59 +26,16 @@ type FormState = {
   notes: string
 }
 
-const sampleActivityById: Record<string, Activity> = {
-  'act-01': {
-    id: 'act-01',
-    title: 'Morning Movement',
-    date: 'Apr 10, 2024',
-    time: '09:30',
-    location: 'Studio A',
-    program: 'Movement',
-    seatsLeft: 3,
-    capacity: 12,
-  },
-  'act-02': {
-    id: 'act-02',
-    title: 'Creative Collage Lab',
-    date: 'Apr 10, 2024',
-    time: '11:00',
-    location: 'Art Room',
-    program: 'Creative',
-    seatsLeft: 6,
-    capacity: 16,
-  },
-  'act-03': {
-    id: 'act-03',
-    title: 'Caregiver Circle',
-    date: 'Apr 11, 2024',
-    time: '14:00',
-    location: 'Community Lounge',
-    program: 'Caregiver sessions',
-    seatsLeft: 2,
-    capacity: 10,
-  },
-}
+const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
 
 export default function ActivityDetailPage({
   params,
 }: {
   params: { id: string }
 }) {
-  const activity = useMemo(() => {
-    return (
-      sampleActivityById[params.id] || {
-        id: params.id,
-        title: 'Community Activity',
-        date: 'Apr 14, 2024',
-        time: '10:00',
-        location: 'Main Hall',
-        program: 'Community',
-        seatsLeft: 8,
-        capacity: 15,
-      }
-    )
-  }, [params.id])
-
+  const [activity, setActivity] = useState<Activity | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>({
     name: '',
     email: '',
@@ -87,9 +46,59 @@ export default function ActivityDetailPage({
     notes: '',
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const [submitted, setSubmitted] = useState(false)
+  const [submitStatus, setSubmitStatus] = useState<
+    'idle' | 'submitting' | 'success' | 'error'
+  >('idle')
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
-  const updateField = <Key extends keyof FormState>(key: Key, value: FormState[Key]) => {
+  useEffect(() => {
+    let isActive = true
+
+    const loadActivity = async () => {
+      setIsLoading(true)
+      setError(null)
+
+      try {
+        const response = await fetch(`${apiBase}/api/activities/${params.id}`)
+        if (!response.ok) {
+          throw new Error('Unable to load activity details. Please try again.')
+        }
+        const payload = await response.json()
+        const data = payload?.data
+
+        if (isActive) {
+          if (!data) {
+            throw new Error('Activity data is missing.')
+          }
+          setActivity(data)
+        }
+      } catch (loadError) {
+        if (isActive) {
+          const message =
+            loadError instanceof Error
+              ? loadError.message
+              : 'Unable to load activity details. Please try again.'
+          setError(message)
+          setActivity(null)
+        }
+      } finally {
+        if (isActive) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    void loadActivity()
+
+    return () => {
+      isActive = false
+    }
+  }, [apiBase, params.id])
+
+  const updateField = <Key extends keyof FormState>(
+    key: Key,
+    value: FormState[Key]
+  ) => {
     setForm((prev) => ({ ...prev, [key]: value }))
   }
 
@@ -114,12 +123,100 @@ export default function ActivityDetailPage({
     return Object.keys(nextErrors).length === 0
   }
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const formatDate = (isoDate: string) => {
+    const date = new Date(`${isoDate}T00:00:00`)
+    return date.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    })
+  }
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    setSubmitted(false)
-    if (validate()) {
-      setSubmitted(true)
+
+    if (!activity || submitStatus === 'submitting') {
+      return
     }
+
+    setSubmitStatus('idle')
+    setSubmitError(null)
+
+    if (!validate()) {
+      return
+    }
+
+    setSubmitStatus('submitting')
+
+    try {
+      const response = await fetch(`${apiBase}/api/registrations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          activityId: activity.id,
+          name: form.name,
+          email: form.email,
+          role: form.role,
+          membership: form.membership,
+          accessibility: form.accessibility,
+          caregiverPayment: form.caregiverPayment,
+          notes: form.notes,
+        }),
+      })
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        const message = payload?.error || 'Unable to submit registration.'
+        throw new Error(message)
+      }
+
+      setSubmitStatus('success')
+    } catch (submitFailure) {
+      const message =
+        submitFailure instanceof Error
+          ? submitFailure.message
+          : 'Unable to submit registration.'
+      setSubmitError(message)
+      setSubmitStatus('error')
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="container">
+        <div className="status loading">
+          <span className="spinner" aria-hidden="true" />
+          Loading activity details from the API...
+        </div>
+      </div>
+    )
+  }
+
+  if (!activity || error) {
+    return (
+      <div className="container">
+        <section className="hero section-tight reveal">
+          <div>
+            <span className="badge">Activity details</span>
+            <h1>Activity unavailable</h1>
+            <p>We could not load this session right now.</p>
+          </div>
+          <div className="hero-card">
+            <h3>Next step</h3>
+            <p>Return to the calendar and choose another session.</p>
+            <div className="hero-actions">
+              <Link className="button primary" href="/calendar">
+                Back to calendar
+              </Link>
+            </div>
+          </div>
+        </section>
+        <div className="status error">{error || 'Activity not found.'}</div>
+      </div>
+    )
   }
 
   return (
@@ -129,12 +226,16 @@ export default function ActivityDetailPage({
           <span className="badge">Activity details</span>
           <h1>{activity.title}</h1>
           <p>
-            {activity.date} at {activity.time} in {activity.location}. Program:{' '}
-            {activity.program}.
+            {formatDate(activity.date)} at {activity.time} in{' '}
+            {activity.location}. Program: {activity.program}.
           </p>
+          {activity.description && <p>{activity.description}</p>}
           <div className="detail-tags">
             <span className="detail-pill">{activity.seatsLeft} seats left</span>
             <span className="detail-pill">Capacity {activity.capacity}</span>
+            {activity.cadence && (
+              <span className="detail-pill">{activity.cadence}</span>
+            )}
           </div>
         </div>
         <div className="hero-card">
@@ -203,20 +304,23 @@ export default function ActivityDetailPage({
             <div className="form-field">
               <span className="form-label">Membership cadence *</span>
               <div className="radio-group">
-                {(['Ad hoc', 'Once a week', 'Twice a week', 'Three or more'] as const).map(
-                  (option) => (
-                    <label key={option} className="radio-option">
-                      <input
-                        type="radio"
-                        name="membership"
-                        value={option}
-                        checked={form.membership === option}
-                        onChange={() => updateField('membership', option)}
-                      />
-                      <span>{option}</span>
-                    </label>
-                  )
-                )}
+                {([
+                  'Ad hoc',
+                  'Once a week',
+                  'Twice a week',
+                  'Three or more',
+                ] as const).map((option) => (
+                  <label key={option} className="radio-option">
+                    <input
+                      type="radio"
+                      name="membership"
+                      value={option}
+                      checked={form.membership === option}
+                      onChange={() => updateField('membership', option)}
+                    />
+                    <span>{option}</span>
+                  </label>
+                ))}
               </div>
               {errors.membership && (
                 <span className="form-error">{errors.membership}</span>
@@ -258,8 +362,14 @@ export default function ActivityDetailPage({
             </label>
 
             <div className="form-actions">
-              <button className="button primary" type="submit">
-                Submit registration
+              <button
+                className="button primary"
+                type="submit"
+                disabled={submitStatus === 'submitting'}
+              >
+                {submitStatus === 'submitting'
+                  ? 'Submitting...'
+                  : 'Submit registration'}
               </button>
               <button
                 className="button"
@@ -275,17 +385,21 @@ export default function ActivityDetailPage({
                     notes: '',
                   })
                   setErrors({})
-                  setSubmitted(false)
+                  setSubmitStatus('idle')
+                  setSubmitError(null)
                 }}
               >
                 Clear form
               </button>
             </div>
 
-            {submitted && (
+            {submitStatus === 'success' && (
               <div className="status success">
                 Registration saved. A confirmation message will be sent soon.
               </div>
+            )}
+            {submitStatus === 'error' && (
+              <div className="status error">{submitError}</div>
             )}
           </form>
         </div>
