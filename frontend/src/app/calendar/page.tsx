@@ -3,7 +3,7 @@
 export default function CalendarPage() {
   return (
     <div className="container">
-      <section className="hero section-tight">
+      <section className="hero section-tight reveal">
         <div>
           <span className="badge">Calendar view</span>
           <h1>Unified activity schedule</h1>
@@ -26,7 +26,7 @@ export default function CalendarPage() {
         </div>
       </section>
 
-      <section>
+      <section className="reveal delay-1">
         <div className="filters">
           <span className="chip active">All programs</span>
           <span className="chip">Movement</span>

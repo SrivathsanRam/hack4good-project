@@ -1,9 +1,9 @@
-'use client'
+import Link from 'next/link'
 
 export default function Home() {
   return (
     <div className="container">
-      <section className="hero">
+      <section className="hero reveal">
         <div>
           <span className="badge">Prototype: unified activities</span>
           <h1>One calendar that respects every schedule.</h1>
@@ -13,16 +13,16 @@ export default function Home() {
             view that keeps everyone aligned.
           </p>
           <div className="hero-actions">
-            <a className="button primary" href="/calendar">
+            <Link className="button primary" href="/calendar">
               Open the calendar
-            </a>
-            <a className="button" href="/admin">
+            </Link>
+            <Link className="button" href="/admin">
               Staff console
-            </a>
+            </Link>
           </div>
         </div>
         <div className="hero-card">
-          <h3>Today’s focus</h3>
+          <h3>Today's focus</h3>
           <p>
             Consolidate activity schedules, capture attendance details up front,
             and lower weekly admin time by half.
@@ -34,7 +34,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="grid">
+      <section className="grid reveal delay-1">
         <article className="card">
           <h4>Participants</h4>
           <p>Register across programs from a single calendar view.</p>

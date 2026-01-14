@@ -1,7 +1,7 @@
 ﻿export default function VolunteerPage() {
   return (
     <div className="container">
-      <section className="hero section-tight">
+      <section className="hero section-tight reveal">
         <div>
           <span className="badge">Volunteer view</span>
           <h1>Discover ways to support each session</h1>
@@ -19,7 +19,7 @@
         </div>
       </section>
 
-      <section className="grid">
+      <section className="grid reveal delay-1">
         <article className="card">
           <h4>Skills spotlight</h4>
           <p>Highlight specialized support like accessibility or tech help.</p>
