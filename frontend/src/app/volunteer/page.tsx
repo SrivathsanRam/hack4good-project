@@ -1,37 +1,195 @@
-﻿export default function VolunteerPage() {
+﻿import Link from 'next/link'
+
+export default function VolunteerPage() {
   return (
     <div className="container">
       <section className="hero section-tight reveal">
         <div>
           <span className="badge">Volunteer view</span>
-          <h1>Discover ways to support each session</h1>
+          <h1>Discover opportunities that fit your week</h1>
           <p>
-            Opportunities will appear here with time, location, and role notes
-            once the schedule is connected.
+            Set your availability once, then choose sessions from a shared
+            calendar that already accounts for capacity and support needs.
           </p>
         </div>
         <div className="hero-card">
           <h3>Volunteer readiness</h3>
           <p>
-            Track onboarding steps, confirm availability, and join the calendar
-            once activity data arrives.
+            Keep your profile and cadence preferences up to date to get the best
+            matches.
           </p>
+          <div className="stat-row">
+            <div className="stat-pill">
+              <span className="stat-pill-value">2</span>
+              <span className="stat-pill-label">Matches this week</span>
+            </div>
+            <div className="stat-pill">
+              <span className="stat-pill-value">1</span>
+              <span className="stat-pill-label">Checklist items left</span>
+            </div>
+          </div>
         </div>
       </section>
 
-      <section className="grid reveal delay-1">
-        <article className="card">
-          <h4>Skills spotlight</h4>
-          <p>Highlight specialized support like accessibility or tech help.</p>
-        </article>
-        <article className="card">
-          <h4>Availability</h4>
-          <p>Set weekly cadence to receive matched opportunities.</p>
-        </article>
-        <article className="card">
-          <h4>Commitments</h4>
-          <p>Confirm or release shifts without email follow-up.</p>
-        </article>
+      <section className="section reveal delay-1">
+        <div className="section-heading">
+          <span className="section-eyebrow">Suggested sessions</span>
+          <h2 className="section-title">Priority matches for you</h2>
+          <p className="section-subtitle">
+            These opportunities align with your interests and availability.
+          </p>
+        </div>
+        <div className="match-grid">
+          <article className="match-card">
+            <div className="match-header">
+              <span className="activity-time">09:00</span>
+              <span className="role-pill" data-variant="Volunteers">
+                Volunteer
+              </span>
+            </div>
+            <h3>Movement Support Volunteer</h3>
+            <p className="match-meta">Thu, Apr 12 - Studio A</p>
+            <div className="activity-tags">
+              <span className="activity-tag" data-variant="Movement">
+                Movement
+              </span>
+              <span className="activity-tag" data-variant="Weekly">
+                Weekly
+              </span>
+            </div>
+            <div className="activity-footer">
+              <span className="activity-availability">2 of 4 slots open</span>
+              <Link className="button" href="/activity/act-04">
+                View details
+              </Link>
+            </div>
+          </article>
+          <article className="match-card">
+            <div className="match-header">
+              <span className="activity-time">10:30</span>
+              <span className="role-pill" data-variant="Volunteers">
+                Volunteer
+              </span>
+            </div>
+            <h3>Creative Studio Setup</h3>
+            <p className="match-meta">Thu, Apr 12 - Art Room</p>
+            <div className="activity-tags">
+              <span className="activity-tag" data-variant="Creative">
+                Creative
+              </span>
+              <span className="activity-tag" data-variant="Weekly">
+                Weekly
+              </span>
+            </div>
+            <div className="activity-footer">
+              <span className="activity-availability">3 of 6 slots open</span>
+              <Link className="button" href="/activity/act-05">
+                View details
+              </Link>
+            </div>
+          </article>
+          <article className="match-card">
+            <div className="match-header">
+              <span className="activity-time">14:00</span>
+              <span className="role-pill" data-variant="Participants">
+                Support
+              </span>
+            </div>
+            <h3>Caregiver Circle Support</h3>
+            <p className="match-meta">Fri, Apr 13 - Community Lounge</p>
+            <div className="activity-tags">
+              <span className="activity-tag" data-variant="Caregiver sessions">
+                Caregiver
+              </span>
+              <span className="activity-tag" data-variant="Ad hoc">
+                Ad hoc
+              </span>
+            </div>
+            <div className="activity-footer">
+              <span className="activity-availability">1 of 2 slots open</span>
+              <Link className="button" href="/activity/act-03">
+                View details
+              </Link>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section className="detail-grid reveal delay-2">
+        <div className="detail-card">
+          <h2>Availability preferences</h2>
+          <p className="detail-subtitle">
+            Share when you can help and what types of sessions you enjoy.
+          </p>
+          <div className="form">
+            <label className="form-field">
+              <span className="form-label">Weekly cadence</span>
+              <select className="input">
+                <option>Ad hoc</option>
+                <option>Once a week</option>
+                <option>Twice a week</option>
+                <option>Three or more</option>
+              </select>
+            </label>
+            <div className="form-row">
+              <label className="checkbox-field">
+                <input type="checkbox" defaultChecked />
+                <span>Morning sessions</span>
+              </label>
+              <label className="checkbox-field">
+                <input type="checkbox" />
+                <span>Afternoon sessions</span>
+              </label>
+            </div>
+            <label className="form-field">
+              <span className="form-label">Preferred program</span>
+              <select className="input">
+                <option>Movement</option>
+                <option>Creative</option>
+                <option>Caregiver sessions</option>
+              </select>
+            </label>
+            <button className="button primary" type="button">
+              Save preferences
+            </button>
+          </div>
+        </div>
+        <div className="detail-card">
+          <h2>Onboarding checklist</h2>
+          <p className="detail-subtitle">
+            Complete these steps to start confirming sessions.
+          </p>
+          <div className="checklist">
+            <label className="checkbox-field">
+              <input type="checkbox" defaultChecked />
+              <span>Volunteer profile completed</span>
+            </label>
+            <label className="checkbox-field">
+              <input type="checkbox" defaultChecked />
+              <span>Availability confirmed</span>
+            </label>
+            <label className="checkbox-field">
+              <input type="checkbox" />
+              <span>Background check submitted</span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <section className="callout reveal delay-2">
+        <h2>Ready to lock in your next shift?</h2>
+        <p>
+          Explore the full calendar to find every volunteer opportunity in one
+          place.
+        </p>
+        <div className="callout-actions">
+          <Link className="button primary" href="/calendar">
+            Browse full calendar
+          </Link>
+          <Link className="button ghost" href="/admin">
+            Connect with staff
+          </Link>
+        </div>
       </section>
     </div>
   )

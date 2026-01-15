@@ -175,6 +175,15 @@ export default function AdminPage() {
     return activities.find((activity) => activity.id === selectedActivityId)
   }, [activities, selectedActivityId])
 
+  const nextSession = useMemo(() => {
+    const sorted = [...activities].sort((a, b) => {
+      const dateA = new Date(`${a.date}T${a.time || '00:00'}`)
+      const dateB = new Date(`${b.date}T${b.time || '00:00'}`)
+      return dateA.getTime() - dateB.getTime()
+    })
+    return sorted[0]
+  }, [activities])
+
   const visibleAttendance = useMemo(() => {
     return attendance.filter(
       (record) => record.activityId === selectedActivityId
@@ -182,6 +191,16 @@ export default function AdminPage() {
   }, [attendance, selectedActivityId])
 
   const checkedCount = visibleAttendance.filter((record) => record.attended).length
+  const attendanceRate =
+    visibleAttendance.length > 0
+      ? Math.round((checkedCount / visibleAttendance.length) * 100)
+      : 0
+  const participantSessions = activities.filter(
+    (activity) => activity.role === 'Participants'
+  ).length
+  const volunteerSessions = activities.filter(
+    (activity) => activity.role === 'Volunteers'
+  ).length
 
   const updateFormField = <Key extends keyof ActivityFormState>(
     key: Key,
@@ -398,6 +417,43 @@ export default function AdminPage() {
         <div className="hero-card">
           <h3>Staff focus</h3>
           <p>Keep the schedule clean and let the platform handle reminders.</p>
+        </div>
+      </section>
+
+      <section className="section reveal delay-1">
+        <div className="section-heading">
+          <span className="section-eyebrow">Weekly snapshot</span>
+          <h2 className="section-title">Schedule health at a glance</h2>
+          <p className="section-subtitle">
+            Monitor coverage, registrations, and upcoming sessions.
+          </p>
+        </div>
+        <div className="kpi-grid">
+          <div className="kpi-card">
+            <span className="kpi-label">Total sessions</span>
+            <span className="kpi-value">{activities.length}</span>
+            <span className="kpi-foot">
+              {participantSessions} participant, {volunteerSessions} volunteer
+            </span>
+          </div>
+          <div className="kpi-card">
+            <span className="kpi-label">Attendance check-ins</span>
+            <span className="kpi-value">{attendanceRate}%</span>
+            <span className="kpi-foot">
+              {checkedCount} of {visibleAttendance.length} in this session
+            </span>
+          </div>
+          <div className="kpi-card">
+            <span className="kpi-label">Next session</span>
+            <span className="kpi-value">
+              {nextSession ? nextSession.title : 'No sessions'}
+            </span>
+            <span className="kpi-foot">
+              {nextSession
+                ? `${nextSession.date} at ${nextSession.time}`
+                : 'Add a session to get started.'}
+            </span>
+          </div>
         </div>
       </section>
 

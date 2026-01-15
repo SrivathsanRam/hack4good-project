@@ -22,6 +22,8 @@ export default function CalendarPage() {
   const [viewMode, setViewMode] = useState<'Month' | 'Week'>('Month')
   const [programFilter, setProgramFilter] = useState('All programs')
   const [roleFilter, setRoleFilter] = useState('All roles')
+  const [cadenceFilter, setCadenceFilter] = useState('All cadences')
+  const [searchTerm, setSearchTerm] = useState('')
   const [activities, setActivities] = useState<Activity[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -34,6 +36,7 @@ export default function CalendarPage() {
     'Caregiver sessions',
   ]
   const roleOptions = ['All roles', 'Participants', 'Volunteers']
+  const cadenceOptions = ['All cadences', 'Ad hoc', 'Weekly', 'Twice weekly']
 
   useEffect(() => {
     let isActive = true
@@ -80,14 +83,54 @@ export default function CalendarPage() {
     }
   }, [apiBase, refreshKey])
 
+  const summaryStats = useMemo(() => {
+    const participantSessions = activities.filter(
+      (activity) => activity.role === 'Participants'
+    ).length
+    const volunteerSessions = activities.filter(
+      (activity) => activity.role === 'Volunteers'
+    ).length
+    const uniqueDays = new Set(activities.map((activity) => activity.date)).size
+
+    return {
+      total: activities.length,
+      participantSessions,
+      volunteerSessions,
+      uniqueDays,
+    }
+  }, [activities])
+
+  const filtersActive =
+    searchTerm.trim().length > 0 ||
+    programFilter !== 'All programs' ||
+    roleFilter !== 'All roles' ||
+    cadenceFilter !== 'All cadences'
+
+  const resetFilters = () => {
+    setProgramFilter('All programs')
+    setRoleFilter('All roles')
+    setCadenceFilter('All cadences')
+    setSearchTerm('')
+  }
+
   const filteredActivities = useMemo(() => {
+    const searchLower = searchTerm.trim().toLowerCase()
+
     return activities.filter((activity) => {
       const matchesProgram =
         programFilter === 'All programs' || activity.program === programFilter
       const matchesRole = roleFilter === 'All roles' || activity.role === roleFilter
-      return matchesProgram && matchesRole
+      const matchesCadence =
+        cadenceFilter === 'All cadences' || activity.cadence === cadenceFilter
+      const matchesSearch =
+        !searchLower ||
+        [activity.title, activity.location, activity.program, activity.cadence]
+          .filter(Boolean)
+          .some((value) => value.toLowerCase().includes(searchLower))
+
+      return matchesProgram && matchesRole && matchesCadence && matchesSearch
     })
-  }, [activities, programFilter, roleFilter])
+  }, [activities, cadenceFilter, programFilter, roleFilter, searchTerm])
 
   const groupedByDate = useMemo(() => {
     const groups = new Map<string, Activity[]>()
@@ -113,6 +156,61 @@ export default function CalendarPage() {
     })
   }
 
+  const getSeatFill = (activity: Activity) => {
+    if (!activity.capacity) {
+      return 0
+    }
+    const used = Math.max(activity.capacity - activity.seatsLeft, 0)
+    return Math.min(used / activity.capacity, 1)
+  }
+
+  const renderActivityCard = (activity: Activity) => {
+    const seatFill = Math.round(getSeatFill(activity) * 100)
+
+    return (
+      <article key={activity.id} className="activity-card">
+        <div className="activity-header">
+          <div>
+            <span className="activity-time">{activity.time}</span>
+            <h3>{activity.title}</h3>
+            <p className="activity-meta">{activity.location}</p>
+          </div>
+          <span className="role-pill" data-variant={activity.role}>
+            {activity.role}
+          </span>
+        </div>
+        <div className="activity-tags">
+          <span className="activity-tag" data-variant={activity.program}>
+            {activity.program}
+          </span>
+          <span className="activity-tag" data-variant={activity.cadence}>
+            {activity.cadence}
+          </span>
+        </div>
+        <div className="activity-progress">
+          <div
+            className="meter"
+            role="progressbar"
+            aria-valuenow={seatFill}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <span style={{ width: `${seatFill}%` }} />
+          </div>
+          <span className="activity-capacity">
+            {activity.seatsLeft} of {activity.capacity} seats left
+          </span>
+        </div>
+        <div className="activity-footer">
+          <span className="activity-availability">{activity.cadence}</span>
+          <Link href={`/activity/${activity.id}`} className="button">
+            View details
+          </Link>
+        </div>
+      </article>
+    )
+  }
+
   const statusLabel = isLoading
     ? 'Loading schedule...'
     : `${filteredActivities.length} activities matched`
@@ -129,8 +227,30 @@ export default function CalendarPage() {
           </p>
         </div>
         <div className="hero-card">
-          <h3>Quick actions</h3>
-          <p>Manage schedule visibility and registrations.</p>
+          <h3>Schedule pulse</h3>
+          <p>Track how many sessions are live across programs.</p>
+          <div className="stat-row">
+            <div className="stat-pill">
+              <span className="stat-pill-value">{summaryStats.total}</span>
+              <span className="stat-pill-label">Sessions</span>
+            </div>
+            <div className="stat-pill">
+              <span className="stat-pill-value">
+                {summaryStats.participantSessions}
+              </span>
+              <span className="stat-pill-label">Participant</span>
+            </div>
+            <div className="stat-pill">
+              <span className="stat-pill-value">
+                {summaryStats.volunteerSessions}
+              </span>
+              <span className="stat-pill-label">Volunteer</span>
+            </div>
+            <div className="stat-pill">
+              <span className="stat-pill-value">{summaryStats.uniqueDays}</span>
+              <span className="stat-pill-label">Days</span>
+            </div>
+          </div>
           <div className="hero-actions">
             <Link className="button" href="/admin">
               Add activity
@@ -144,19 +264,44 @@ export default function CalendarPage() {
 
       <section className="reveal delay-1">
         <div className="toolbar">
-          <div className="toggle-group" role="tablist" aria-label="Calendar view">
-            {(['Month', 'Week'] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                className={`toggle-button ${viewMode === mode ? 'active' : ''}`}
-                onClick={() => setViewMode(mode)}
-              >
-                {mode} view
-              </button>
-            ))}
+          <div className="toolbar-left">
+            <div className="toggle-group" role="tablist" aria-label="Calendar view">
+              {(['Month', 'Week'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={`toggle-button ${viewMode === mode ? 'active' : ''}`}
+                  onClick={() => setViewMode(mode)}
+                >
+                  {mode} view
+                </button>
+              ))}
+            </div>
+            <span className="toolbar-note">{statusLabel}</span>
           </div>
-          <span className="toolbar-note">{statusLabel}</span>
+          <div className="toolbar-actions">
+            <button
+              className="button ghost"
+              type="button"
+              onClick={resetFilters}
+              disabled={!filtersActive}
+            >
+              Reset filters
+            </button>
+          </div>
+        </div>
+
+        <div className="filter-panel">
+          <label className="search-field">
+            <span className="form-label">Search</span>
+            <input
+              className="input"
+              type="search"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Search by title, location, or program"
+            />
+          </label>
         </div>
 
         <div className="filters">
@@ -185,6 +330,19 @@ export default function CalendarPage() {
             </button>
           ))}
         </div>
+        <div className="filters">
+          <span className="filter-label">Cadence</span>
+          {cadenceOptions.map((option) => (
+            <button
+              key={option}
+              type="button"
+              className={`chip ${cadenceFilter === option ? 'active' : ''}`}
+              onClick={() => setCadenceFilter(option)}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
 
         {isLoading ? (
           <div className="status loading">
@@ -206,37 +364,22 @@ export default function CalendarPage() {
           <div className="empty-state">
             <strong>No activities match those filters</strong>
             <span>Try switching to another program or role.</span>
+            {filtersActive && (
+              <button className="button" type="button" onClick={resetFilters}>
+                Reset filters
+              </button>
+            )}
           </div>
         ) : viewMode === 'Month' ? (
           <div className="calendar-month-grid">
             {groupedByDate.map(([date, items]) => (
               <div key={date} className="day-panel">
-                <div className="day-title">{formatDay(date)}</div>
+                <div className="day-title">
+                  {formatDay(date)}
+                  <span className="day-count">{items.length} sessions</span>
+                </div>
                 <div className="day-cards">
-                  {items.map((activity) => (
-                    <article key={activity.id} className="activity-card">
-                      <div>
-                        <h3>{activity.title}</h3>
-                        <p className="activity-meta">
-                          {activity.time} - {activity.location}
-                        </p>
-                      </div>
-                      <div className="activity-tags">
-                        <span className="activity-tag">{activity.program}</span>
-                        <span className="activity-tag">{activity.role}</span>
-                        <span className="activity-tag">{activity.cadence}</span>
-                      </div>
-                      <div className="activity-footer">
-                        <span>{activity.seatsLeft} seats left</span>
-                        <Link
-                          href={`/activity/${activity.id}`}
-                          className="button"
-                        >
-                          View details
-                        </Link>
-                      </div>
-                    </article>
-                  ))}
+                  {items.map((activity) => renderActivityCard(activity))}
                 </div>
               </div>
             ))}
@@ -245,31 +388,12 @@ export default function CalendarPage() {
           <div className="calendar-week-list">
             {groupedByDate.map(([date, items]) => (
               <div key={date} className="week-row">
-                <div className="day-title">{formatDay(date)}</div>
+                <div className="day-title">
+                  {formatDay(date)}
+                  <span className="day-count">{items.length} sessions</span>
+                </div>
                 <div className="week-cards">
-                  {items.map((activity) => (
-                    <article key={activity.id} className="activity-card">
-                      <div>
-                        <h3>{activity.title}</h3>
-                        <p className="activity-meta">
-                          {activity.time} - {activity.location}
-                        </p>
-                      </div>
-                      <div className="activity-tags">
-                        <span className="activity-tag">{activity.program}</span>
-                        <span className="activity-tag">{activity.role}</span>
-                      </div>
-                      <div className="activity-footer">
-                        <span>{activity.seatsLeft} seats left</span>
-                        <Link
-                          href={`/activity/${activity.id}`}
-                          className="button"
-                        >
-                          View details
-                        </Link>
-                      </div>
-                    </article>
-                  ))}
+                  {items.map((activity) => renderActivityCard(activity))}
                 </div>
               </div>
             ))}

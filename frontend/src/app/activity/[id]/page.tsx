@@ -133,6 +133,18 @@ export default function ActivityDetailPage({
     })
   }
 
+  const requiredFields = [
+    { label: 'Name', value: form.name.trim() },
+    { label: 'Email', value: form.email.trim() },
+    { label: 'Role', value: form.role },
+    { label: 'Cadence', value: form.membership },
+  ]
+  const completedSteps = requiredFields.filter((field) => field.value).length
+  const progressPercent =
+    requiredFields.length > 0
+      ? Math.round((completedSteps / requiredFields.length) * 100)
+      : 0
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
@@ -219,17 +231,61 @@ export default function ActivityDetailPage({
     )
   }
 
+  const seatFill =
+    activity.capacity > 0
+      ? Math.round(
+          ((activity.capacity - activity.seatsLeft) / activity.capacity) * 100
+        )
+      : 0
+
   return (
     <div className="container">
       <section className="hero section-tight reveal">
-        <div>
-          <span className="badge">Activity details</span>
-          <h1>{activity.title}</h1>
-          <p>
-            {formatDate(activity.date)} at {activity.time} in{' '}
-            {activity.location}. Program: {activity.program}.
-          </p>
-          {activity.description && <p>{activity.description}</p>}
+        <div className="detail-stack">
+          <div>
+            <span className="badge">Activity details</span>
+            <h1>{activity.title}</h1>
+            <p>
+              {formatDate(activity.date)} at {activity.time} in{' '}
+              {activity.location}. Program: {activity.program}.
+            </p>
+            {activity.description && <p>{activity.description}</p>}
+          </div>
+
+          <div className="info-grid">
+            <div className="info-card">
+              <span className="info-label">Date</span>
+              <span className="info-value">{formatDate(activity.date)}</span>
+            </div>
+            <div className="info-card">
+              <span className="info-label">Time</span>
+              <span className="info-value">{activity.time}</span>
+            </div>
+            <div className="info-card">
+              <span className="info-label">Location</span>
+              <span className="info-value">{activity.location}</span>
+            </div>
+            <div className="info-card">
+              <span className="info-label">Program</span>
+              <span className="info-value">{activity.program}</span>
+            </div>
+          </div>
+
+          <div className="activity-progress">
+            <div
+              className="meter"
+              role="progressbar"
+              aria-valuenow={seatFill}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <span style={{ width: `${seatFill}%` }} />
+            </div>
+            <span className="activity-capacity">
+              {activity.seatsLeft} of {activity.capacity} seats left
+            </span>
+          </div>
+
           <div className="detail-tags">
             <span className="detail-pill">{activity.seatsLeft} seats left</span>
             <span className="detail-pill">Capacity {activity.capacity}</span>
@@ -257,6 +313,23 @@ export default function ActivityDetailPage({
             submission.
           </p>
           <form className="form" onSubmit={handleSubmit} noValidate>
+            <div className="form-progress">
+              <div className="progress-meta">
+                <span>Registration progress</span>
+                <span>
+                  {completedSteps} of {requiredFields.length} complete
+                </span>
+              </div>
+              <div
+                className="meter"
+                role="progressbar"
+                aria-valuenow={progressPercent}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              >
+                <span style={{ width: `${progressPercent}%` }} />
+              </div>
+            </div>
             <div className="form-row">
               <label className="form-field">
                 <span className="form-label">Full name *</span>
@@ -404,20 +477,36 @@ export default function ActivityDetailPage({
           </form>
         </div>
 
-        <aside className="detail-card">
-          <h2>Need help deciding?</h2>
+        <aside className="detail-card summary-card">
+          <h2>Registration summary</h2>
           <p className="detail-subtitle">
-            Staff can review special requests before the session begins.
+            Confirm the details you are about to submit.
           </p>
-          <ul className="detail-list">
-            <li>Share accessibility notes early.</li>
-            <li>Confirm caregiver payment details.</li>
-            <li>Volunteer coverage is limited by capacity.</li>
-          </ul>
-          <div className="empty-state" style={{ marginTop: '20px' }}>
+          <dl className="summary-list">
+            <div className="summary-row">
+              <dt>Role</dt>
+              <dd>{form.role || 'Not selected'}</dd>
+            </div>
+            <div className="summary-row">
+              <dt>Cadence</dt>
+              <dd>{form.membership || 'Not selected'}</dd>
+            </div>
+            <div className="summary-row">
+              <dt>Accessibility</dt>
+              <dd>{form.accessibility ? 'Yes' : 'No'}</dd>
+            </div>
+            <div className="summary-row">
+              <dt>Caregiver payment</dt>
+              <dd>{form.caregiverPayment ? 'Required' : 'Not needed'}</dd>
+            </div>
+          </dl>
+          <div className="empty-state">
             <strong>No conflicts detected</strong>
             <span>Membership rules will be enforced after submission.</span>
           </div>
+          <p className="summary-note">
+            Staff will review support notes before the session begins.
+          </p>
         </aside>
       </section>
     </div>
