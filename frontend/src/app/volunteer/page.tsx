@@ -49,6 +49,10 @@ export default function VolunteerPage() {
             </div>
             <h3>Movement Support Volunteer</h3>
             <p className="match-meta">Thu, Apr 12 - Studio A</p>
+            <div className="match-reasons">
+              <span className="match-reason">Morning friendly</span>
+              <span className="match-reason">Needs setup help</span>
+            </div>
             <div className="activity-tags">
               <span className="activity-tag" data-variant="Movement">
                 Movement
@@ -73,6 +77,10 @@ export default function VolunteerPage() {
             </div>
             <h3>Creative Studio Setup</h3>
             <p className="match-meta">Thu, Apr 12 - Art Room</p>
+            <div className="match-reasons">
+              <span className="match-reason">Art support</span>
+              <span className="match-reason">Light lifting</span>
+            </div>
             <div className="activity-tags">
               <span className="activity-tag" data-variant="Creative">
                 Creative
@@ -97,6 +105,10 @@ export default function VolunteerPage() {
             </div>
             <h3>Caregiver Circle Support</h3>
             <p className="match-meta">Fri, Apr 13 - Community Lounge</p>
+            <div className="match-reasons">
+              <span className="match-reason">Listening role</span>
+              <span className="match-reason">Ad hoc</span>
+            </div>
             <div className="activity-tags">
               <span className="activity-tag" data-variant="Caregiver sessions">
                 Caregiver

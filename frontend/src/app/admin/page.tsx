@@ -201,6 +201,9 @@ export default function AdminPage() {
   const volunteerSessions = activities.filter(
     (activity) => activity.role === 'Volunteers'
   ).length
+  const lowCapacitySessions = useMemo(() => {
+    return activities.filter((activity) => activity.seatsLeft <= 2)
+  }, [activities])
 
   const updateFormField = <Key extends keyof ActivityFormState>(
     key: Key,
@@ -767,6 +770,37 @@ export default function AdminPage() {
                 ))}
               </tbody>
             </table>
+          )}
+        </div>
+        <div className="detail-card">
+          <h2>Capacity alerts</h2>
+          <p className="detail-subtitle">
+            Sessions that are close to full this week.
+          </p>
+          {lowCapacitySessions.length === 0 ? (
+            <div className="empty-state">
+              <strong>No alerts</strong>
+              <span>All sessions still have healthy capacity.</span>
+            </div>
+          ) : (
+            <div className="risk-list">
+              {lowCapacitySessions.map((activity) => (
+                <div key={activity.id} className="risk-item">
+                  <div>
+                    <h3>{activity.title}</h3>
+                    <p className="admin-meta">
+                      {activity.date} at {activity.time} - {activity.location}
+                    </p>
+                    <span className="alert-pill" data-variant="low">
+                      {activity.seatsLeft} seats left
+                    </span>
+                  </div>
+                  <span className="role-pill" data-variant={activity.role}>
+                    {activity.role}
+                  </span>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </section>

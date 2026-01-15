@@ -166,6 +166,13 @@ export default function CalendarPage() {
 
   const renderActivityCard = (activity: Activity) => {
     const seatFill = Math.round(getSeatFill(activity) * 100)
+    const isFull = activity.seatsLeft <= 0
+    const isLow = activity.seatsLeft > 0 && activity.seatsLeft <= 2
+    const availabilityLabel = isFull
+      ? 'Full'
+      : isLow
+        ? 'Low seats'
+        : `${activity.seatsLeft} seats left`
 
     return (
       <article key={activity.id} className="activity-card">
@@ -175,9 +182,19 @@ export default function CalendarPage() {
             <h3>{activity.title}</h3>
             <p className="activity-meta">{activity.location}</p>
           </div>
-          <span className="role-pill" data-variant={activity.role}>
-            {activity.role}
-          </span>
+          <div className="activity-side">
+            <span className="role-pill" data-variant={activity.role}>
+              {activity.role}
+            </span>
+            {(isLow || isFull) && (
+              <span
+                className="alert-pill"
+                data-variant={isFull ? 'full' : 'low'}
+              >
+                {availabilityLabel}
+              </span>
+            )}
+          </div>
         </div>
         <div className="activity-tags">
           <span className="activity-tag" data-variant={activity.program}>
@@ -202,7 +219,7 @@ export default function CalendarPage() {
           </span>
         </div>
         <div className="activity-footer">
-          <span className="activity-availability">{activity.cadence}</span>
+          <span className="activity-availability">{availabilityLabel}</span>
           <Link href={`/activity/${activity.id}`} className="button">
             View details
           </Link>
@@ -263,85 +280,91 @@ export default function CalendarPage() {
       </section>
 
       <section className="reveal delay-1">
-        <div className="toolbar">
-          <div className="toolbar-left">
-            <div className="toggle-group" role="tablist" aria-label="Calendar view">
-              {(['Month', 'Week'] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  className={`toggle-button ${viewMode === mode ? 'active' : ''}`}
-                  onClick={() => setViewMode(mode)}
-                >
-                  {mode} view
-                </button>
-              ))}
+        <div className="calendar-controls">
+          <div className="toolbar">
+            <div className="toolbar-left">
+              <div
+                className="toggle-group"
+                role="tablist"
+                aria-label="Calendar view"
+              >
+                {(['Month', 'Week'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    className={`toggle-button ${viewMode === mode ? 'active' : ''}`}
+                    onClick={() => setViewMode(mode)}
+                  >
+                    {mode} view
+                  </button>
+                ))}
+              </div>
+              <span className="toolbar-note">{statusLabel}</span>
             </div>
-            <span className="toolbar-note">{statusLabel}</span>
+            <div className="toolbar-actions">
+              <button
+                className="button ghost"
+                type="button"
+                onClick={resetFilters}
+                disabled={!filtersActive}
+              >
+                Reset filters
+              </button>
+            </div>
           </div>
-          <div className="toolbar-actions">
-            <button
-              className="button ghost"
-              type="button"
-              onClick={resetFilters}
-              disabled={!filtersActive}
-            >
-              Reset filters
-            </button>
+
+          <div className="filter-panel">
+            <label className="search-field">
+              <span className="form-label">Search</span>
+              <input
+                className="input"
+                type="search"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Search by title, location, or program"
+              />
+            </label>
           </div>
-        </div>
 
-        <div className="filter-panel">
-          <label className="search-field">
-            <span className="form-label">Search</span>
-            <input
-              className="input"
-              type="search"
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search by title, location, or program"
-            />
-          </label>
-        </div>
-
-        <div className="filters">
-          <span className="filter-label">Program</span>
-          {programOptions.map((option) => (
-            <button
-              key={option}
-              type="button"
-              className={`chip ${programFilter === option ? 'active' : ''}`}
-              onClick={() => setProgramFilter(option)}
-            >
-              {option}
-            </button>
-          ))}
-        </div>
-        <div className="filters">
-          <span className="filter-label">Role</span>
-          {roleOptions.map((option) => (
-            <button
-              key={option}
-              type="button"
-              className={`chip ${roleFilter === option ? 'active' : ''}`}
-              onClick={() => setRoleFilter(option)}
-            >
-              {option}
-            </button>
-          ))}
-        </div>
-        <div className="filters">
-          <span className="filter-label">Cadence</span>
-          {cadenceOptions.map((option) => (
-            <button
-              key={option}
-              type="button"
-              className={`chip ${cadenceFilter === option ? 'active' : ''}`}
-              onClick={() => setCadenceFilter(option)}
-            >
-              {option}
-            </button>
-          ))}
+          <div className="filters">
+            <span className="filter-label">Program</span>
+            {programOptions.map((option) => (
+              <button
+                key={option}
+                type="button"
+                className={`chip ${programFilter === option ? 'active' : ''}`}
+                onClick={() => setProgramFilter(option)}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+          <div className="filters">
+            <span className="filter-label">Role</span>
+            {roleOptions.map((option) => (
+              <button
+                key={option}
+                type="button"
+                className={`chip ${roleFilter === option ? 'active' : ''}`}
+                onClick={() => setRoleFilter(option)}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+          <div className="filters">
+            <span className="filter-label">Cadence</span>
+            {cadenceOptions.map((option) => (
+              <button
+                key={option}
+                type="button"
+                className={`chip ${cadenceFilter === option ? 'active' : ''}`}
+                onClick={() => setCadenceFilter(option)}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
         </div>
 
         {isLoading ? (

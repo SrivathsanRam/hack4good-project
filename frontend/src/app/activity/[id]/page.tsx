@@ -152,6 +152,12 @@ export default function ActivityDetailPage({
       return
     }
 
+    if (activity.seatsLeft <= 0) {
+      setSubmitError('This session is full. Choose another activity.')
+      setSubmitStatus('error')
+      return
+    }
+
     setSubmitStatus('idle')
     setSubmitError(null)
 
@@ -237,6 +243,13 @@ export default function ActivityDetailPage({
           ((activity.capacity - activity.seatsLeft) / activity.capacity) * 100
         )
       : 0
+  const isFull = activity.seatsLeft <= 0
+  const isLow = activity.seatsLeft > 0 && activity.seatsLeft <= 2
+  const availabilityNote = isFull
+    ? 'This session is currently full.'
+    : isLow
+      ? 'Only a few seats remain for this session.'
+      : null
 
   return (
     <div className="container">
@@ -293,6 +306,11 @@ export default function ActivityDetailPage({
               <span className="detail-pill">{activity.cadence}</span>
             )}
           </div>
+          {availabilityNote && (
+            <div className={`status ${isFull ? 'error' : 'warning'}`}>
+              {availabilityNote}
+            </div>
+          )}
         </div>
         <div className="hero-card">
           <h3>Registration checklist</h3>
@@ -438,11 +456,13 @@ export default function ActivityDetailPage({
               <button
                 className="button primary"
                 type="submit"
-                disabled={submitStatus === 'submitting'}
+                disabled={submitStatus === 'submitting' || isFull}
               >
-                {submitStatus === 'submitting'
-                  ? 'Submitting...'
-                  : 'Submit registration'}
+                {isFull
+                  ? 'Session full'
+                  : submitStatus === 'submitting'
+                    ? 'Submitting...'
+                    : 'Submit registration'}
               </button>
               <button
                 className="button"
