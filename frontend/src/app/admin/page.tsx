@@ -1,21 +1,9 @@
 ﻿'use client'
 
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
+import { sampleActivities, sampleRegistrations, type Activity } from '../data/sampleData'
 
-type Activity = {
-  id: string
-  title: string
-  date: string
-  time: string
-  location: string
-  program: string
-  role: 'Participants' | 'Volunteers'
-  capacity: number
-  seatsLeft: number
-  cadence: string
-}
-
-type Registration = {
+type AttendanceRecord = {
   id: string
   activityId: string
   name: string
@@ -34,8 +22,6 @@ type ActivityFormState = {
   capacity: string
 }
 
-const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
-
 const emptyForm: ActivityFormState = {
   title: '',
   date: '',
@@ -47,129 +33,38 @@ const emptyForm: ActivityFormState = {
   capacity: '',
 }
 
+const initialAttendance: AttendanceRecord[] = sampleRegistrations.map((record) => ({
+  id: record.id,
+  activityId: record.activityId,
+  name: record.name,
+  role: record.role,
+  attended: record.attended,
+}))
+
 export default function AdminPage() {
-  const [activities, setActivities] = useState<Activity[]>([])
-  const [attendance, setAttendance] = useState<Registration[]>([])
+  const [activities, setActivities] = useState<Activity[]>(sampleActivities)
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>(initialAttendance)
   const [form, setForm] = useState<ActivityFormState>(emptyForm)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>(
-    'idle'
-  )
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const [selectedActivityId, setSelectedActivityId] = useState('')
-  const [activitiesLoading, setActivitiesLoading] = useState(true)
-  const [activitiesError, setActivitiesError] = useState<string | null>(null)
-  const [attendanceLoading, setAttendanceLoading] = useState(false)
-  const [attendanceError, setAttendanceError] = useState<string | null>(null)
-  const [activitiesRefreshKey, setActivitiesRefreshKey] = useState(0)
-  const [attendanceRefreshKey, setAttendanceRefreshKey] = useState(0)
+  const [selectedActivityId, setSelectedActivityId] = useState(
+    sampleActivities[0]?.id || ''
+  )
 
   useEffect(() => {
-    let isActive = true
-
-    const loadActivities = async () => {
-      setActivitiesLoading(true)
-      setActivitiesError(null)
-
-      try {
-        const response = await fetch(`${apiBase}/api/activities`)
-        if (!response.ok) {
-          throw new Error('Unable to load activities. Please try again.')
-        }
-        const payload = await response.json()
-        const data = Array.isArray(payload?.data) ? payload.data : []
-
-        if (isActive) {
-          setActivities(data)
-        }
-      } catch (loadError) {
-        if (isActive) {
-          const message =
-            loadError instanceof Error
-              ? loadError.message
-              : 'Unable to load activities. Please try again.'
-          setActivitiesError(message)
-        }
-      } finally {
-        if (isActive) {
-          setActivitiesLoading(false)
-        }
-      }
-    }
-
-    void loadActivities()
-
-    return () => {
-      isActive = false
-    }
-  }, [apiBase, activitiesRefreshKey])
-
-  useEffect(() => {
-    if (activities.length === 0) {
-      setSelectedActivityId('')
-      return
-    }
-
-    if (!selectedActivityId) {
+    if (!selectedActivityId && activities.length > 0) {
       setSelectedActivityId(activities[0].id)
       return
     }
-
-    if (!activities.some((activity) => activity.id === selectedActivityId)) {
+    if (
+      selectedActivityId &&
+      activities.length > 0 &&
+      !activities.some((activity) => activity.id === selectedActivityId)
+    ) {
       setSelectedActivityId(activities[0].id)
     }
   }, [activities, selectedActivityId])
-
-  useEffect(() => {
-    if (!selectedActivityId) {
-      setAttendance([])
-      setAttendanceLoading(false)
-      setAttendanceError(null)
-      return
-    }
-
-    let isActive = true
-
-    const loadAttendance = async () => {
-      setAttendanceLoading(true)
-      setAttendanceError(null)
-
-      try {
-        const response = await fetch(
-          `${apiBase}/api/registrations?activityId=${selectedActivityId}`
-        )
-        if (!response.ok) {
-          throw new Error('Unable to load attendance. Please try again.')
-        }
-        const payload = await response.json()
-        const data = Array.isArray(payload?.data) ? payload.data : []
-
-        if (isActive) {
-          setAttendance(data)
-        }
-      } catch (loadError) {
-        if (isActive) {
-          const message =
-            loadError instanceof Error
-              ? loadError.message
-              : 'Unable to load attendance. Please try again.'
-          setAttendanceError(message)
-        }
-      } finally {
-        if (isActive) {
-          setAttendanceLoading(false)
-        }
-      }
-    }
-
-    void loadAttendance()
-
-    return () => {
-      isActive = false
-    }
-  }, [apiBase, attendanceRefreshKey, selectedActivityId])
 
   const selectedActivity = useMemo(() => {
     return activities.find((activity) => activity.id === selectedActivityId)
@@ -211,8 +106,6 @@ export default function AdminPage() {
   ) => {
     setForm((prev) => ({ ...prev, [key]: value }))
     setSaveMessage(null)
-    setSaveError(null)
-    setSaveStatus('idle')
   }
 
   const validate = () => {
@@ -247,66 +140,58 @@ export default function AdminPage() {
     return Object.keys(nextErrors).length === 0
   }
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setSaveMessage(null)
-    setSaveError(null)
 
     if (!validate()) {
       return
     }
 
-    setSaveStatus('saving')
-
     const capacityValue = Number(form.capacity)
-    const payload = {
-      title: form.title,
-      date: form.date,
-      time: form.time,
-      location: form.location,
-      program: form.program,
-      role: form.role,
-      cadence: form.cadence,
-      capacity: capacityValue,
-    }
 
-    try {
-      const response = await fetch(
-        editingId
-          ? `${apiBase}/api/activities/${editingId}`
-          : `${apiBase}/api/activities`,
-        {
-          method: editingId ? 'PATCH' : 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        }
+    if (editingId) {
+      setActivities((prev) =>
+        prev.map((activity) =>
+          activity.id === editingId
+            ? {
+                ...activity,
+                title: form.title,
+                date: form.date,
+                time: form.time,
+                location: form.location,
+                program: form.program,
+                role: form.role as Activity['role'],
+                capacity: capacityValue,
+                seatsLeft: Math.min(activity.seatsLeft, capacityValue),
+                cadence: form.cadence,
+                description: activity.description,
+              }
+            : activity
+        )
       )
-
-      if (!response.ok) {
-        const errorPayload = await response.json().catch(() => null)
-        const message =
-          errorPayload?.error || 'Unable to save activity. Please try again.'
-        throw new Error(message)
+      setSaveMessage('Activity updated successfully.')
+    } else {
+      const newActivity: Activity = {
+        id: `act-${Date.now()}`,
+        title: form.title,
+        date: form.date,
+        time: form.time,
+        location: form.location,
+        program: form.program,
+        role: form.role as Activity['role'],
+        capacity: capacityValue,
+        seatsLeft: capacityValue,
+        cadence: form.cadence,
+        description: 'Newly scheduled session for the coming week.',
       }
-
-      setSaveStatus('success')
-      setSaveMessage(
-        editingId ? 'Activity updated successfully.' : 'Activity created successfully.'
-      )
-      setForm(emptyForm)
-      setFormErrors({})
-      setEditingId(null)
-      setActivitiesRefreshKey((value) => value + 1)
-    } catch (saveFailure) {
-      const message =
-        saveFailure instanceof Error
-          ? saveFailure.message
-          : 'Unable to save activity. Please try again.'
-      setSaveStatus('error')
-      setSaveError(message)
+      setActivities((prev) => [newActivity, ...prev])
+      setSaveMessage('Activity created successfully.')
     }
+
+    setForm(emptyForm)
+    setFormErrors({})
+    setEditingId(null)
   }
 
   const handleEdit = (activity: Activity) => {
@@ -322,8 +207,6 @@ export default function AdminPage() {
       capacity: String(activity.capacity),
     })
     setSaveMessage(null)
-    setSaveError(null)
-    setSaveStatus('idle')
   }
 
   const handleCancel = () => {
@@ -331,45 +214,16 @@ export default function AdminPage() {
     setFormErrors({})
     setEditingId(null)
     setSaveMessage(null)
-    setSaveError(null)
-    setSaveStatus('idle')
   }
 
-  const toggleAttendance = async (record: Registration) => {
-    const nextValue = !record.attended
-
+  const toggleAttendance = (recordId: string) => {
     setAttendance((prev) =>
-      prev.map((item) =>
-        item.id === record.id ? { ...item, attended: nextValue } : item
+      prev.map((record) =>
+        record.id === recordId
+          ? { ...record, attended: !record.attended }
+          : record
       )
     )
-
-    try {
-      const response = await fetch(
-        `${apiBase}/api/registrations/${record.id}`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ attended: nextValue }),
-        }
-      )
-
-      if (!response.ok) {
-        const errorPayload = await response.json().catch(() => null)
-        const message =
-          errorPayload?.error || 'Unable to update attendance. Please try again.'
-        throw new Error(message)
-      }
-    } catch (toggleError) {
-      const message =
-        toggleError instanceof Error
-          ? toggleError.message
-          : 'Unable to update attendance. Please try again.'
-      setAttendanceError(message)
-      setAttendanceRefreshKey((value) => value + 1)
-    }
   }
 
   const downloadCsv = () => {
@@ -602,16 +456,8 @@ export default function AdminPage() {
             </div>
 
             <div className="form-actions">
-              <button
-                className="button primary"
-                type="submit"
-                disabled={saveStatus === 'saving'}
-              >
-                {saveStatus === 'saving'
-                  ? 'Saving...'
-                  : editingId
-                    ? 'Save changes'
-                    : 'Create activity'}
+              <button className="button primary" type="submit">
+                {editingId ? 'Save changes' : 'Create activity'}
               </button>
               <button className="button" type="button" onClick={handleCancel}>
                 Clear form
@@ -619,9 +465,6 @@ export default function AdminPage() {
             </div>
 
             {saveMessage && <div className="status success">{saveMessage}</div>}
-            {saveStatus === 'error' && saveError && (
-              <div className="status error">{saveError}</div>
-            )}
           </form>
         </div>
 
@@ -630,23 +473,7 @@ export default function AdminPage() {
           <p className="detail-subtitle">
             Review the schedule and jump into edit mode when details change.
           </p>
-          {activitiesLoading ? (
-            <div className="status loading">
-              <span className="spinner" aria-hidden="true" />
-              Loading activities...
-            </div>
-          ) : activitiesError ? (
-            <div className="status error">
-              {activitiesError}
-              <button
-                className="button"
-                type="button"
-                onClick={() => setActivitiesRefreshKey((value) => value + 1)}
-              >
-                Try again
-              </button>
-            </div>
-          ) : activities.length === 0 ? (
+          {activities.length === 0 ? (
             <div className="empty-state">
               <strong>No activities yet</strong>
               <span>Create one to populate the schedule.</span>
@@ -724,23 +551,7 @@ export default function AdminPage() {
               ? `${checkedCount} of ${visibleAttendance.length} checked in`
               : 'No registrations yet for this session.'}
           </p>
-          {attendanceLoading ? (
-            <div className="status loading">
-              <span className="spinner" aria-hidden="true" />
-              Loading attendance...
-            </div>
-          ) : attendanceError ? (
-            <div className="status error">
-              {attendanceError}
-              <button
-                className="button"
-                type="button"
-                onClick={() => setAttendanceRefreshKey((value) => value + 1)}
-              >
-                Try again
-              </button>
-            </div>
-          ) : visibleAttendance.length === 0 ? (
+          {visibleAttendance.length === 0 ? (
             <div className="empty-state">
               <strong>No attendance records</strong>
               <span>Registrations will appear here once submitted.</span>
@@ -763,7 +574,7 @@ export default function AdminPage() {
                       <input
                         type="checkbox"
                         checked={record.attended}
-                        onChange={() => toggleAttendance(record)}
+                        onChange={() => toggleAttendance(record.id)}
                       />
                     </td>
                   </tr>

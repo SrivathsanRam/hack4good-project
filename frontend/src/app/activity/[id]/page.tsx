@@ -1,20 +1,8 @@
 ﻿'use client'
 
 import Link from 'next/link'
-import { type FormEvent, useEffect, useState } from 'react'
-
-type Activity = {
-  id: string
-  title: string
-  date: string
-  time: string
-  location: string
-  program: string
-  seatsLeft: number
-  capacity: number
-  cadence?: string
-  description?: string
-}
+import { type FormEvent, useEffect, useMemo, useState } from 'react'
+import { sampleActivities, type Activity } from '../../data/sampleData'
 
 type FormState = {
   name: string
@@ -26,16 +14,32 @@ type FormState = {
   notes: string
 }
 
-const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+const fallbackActivity: Activity = {
+  id: 'act-placeholder',
+  title: 'Community Activity',
+  date: '2024-04-14',
+  time: '10:00',
+  location: 'Main Hall',
+  program: 'Community',
+  role: 'Participants',
+  capacity: 15,
+  seatsLeft: 6,
+  cadence: 'Ad hoc',
+  description: 'A shared session designed to bring everyone together.',
+}
 
 export default function ActivityDetailPage({
   params,
 }: {
   params: { id: string }
 }) {
-  const [activity, setActivity] = useState<Activity | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const resolvedActivity = useMemo(() => {
+    return sampleActivities.find((activity) => activity.id === params.id)
+  }, [params.id])
+
+  const [activity, setActivity] = useState<Activity>(
+    resolvedActivity || fallbackActivity
+  )
   const [form, setForm] = useState<FormState>({
     name: '',
     email: '',
@@ -52,48 +56,10 @@ export default function ActivityDetailPage({
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   useEffect(() => {
-    let isActive = true
-
-    const loadActivity = async () => {
-      setIsLoading(true)
-      setError(null)
-
-      try {
-        const response = await fetch(`${apiBase}/api/activities/${params.id}`)
-        if (!response.ok) {
-          throw new Error('Unable to load activity details. Please try again.')
-        }
-        const payload = await response.json()
-        const data = payload?.data
-
-        if (isActive) {
-          if (!data) {
-            throw new Error('Activity data is missing.')
-          }
-          setActivity(data)
-        }
-      } catch (loadError) {
-        if (isActive) {
-          const message =
-            loadError instanceof Error
-              ? loadError.message
-              : 'Unable to load activity details. Please try again.'
-          setError(message)
-          setActivity(null)
-        }
-      } finally {
-        if (isActive) {
-          setIsLoading(false)
-        }
-      }
-    }
-
-    void loadActivity()
-
-    return () => {
-      isActive = false
-    }
-  }, [apiBase, params.id])
+    setActivity(resolvedActivity || fallbackActivity)
+    setSubmitStatus('idle')
+    setSubmitError(null)
+  }, [resolvedActivity])
 
   const updateField = <Key extends keyof FormState>(
     key: Key,
@@ -145,10 +111,24 @@ export default function ActivityDetailPage({
       ? Math.round((completedSteps / requiredFields.length) * 100)
       : 0
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  const seatFill =
+    activity.capacity > 0
+      ? Math.round(
+          ((activity.capacity - activity.seatsLeft) / activity.capacity) * 100
+        )
+      : 0
+  const isFull = activity.seatsLeft <= 0
+  const isLow = activity.seatsLeft > 0 && activity.seatsLeft <= 2
+  const availabilityNote = isFull
+    ? 'This session is currently full.'
+    : isLow
+      ? 'Only a few seats remain for this session.'
+      : null
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    if (!activity || submitStatus === 'submitting') {
+    if (submitStatus === 'submitting') {
       return
     }
 
@@ -167,89 +147,14 @@ export default function ActivityDetailPage({
 
     setSubmitStatus('submitting')
 
-    try {
-      const response = await fetch(`${apiBase}/api/registrations`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          activityId: activity.id,
-          name: form.name,
-          email: form.email,
-          role: form.role,
-          membership: form.membership,
-          accessibility: form.accessibility,
-          caregiverPayment: form.caregiverPayment,
-          notes: form.notes,
-        }),
-      })
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null)
-        const message = payload?.error || 'Unable to submit registration.'
-        throw new Error(message)
-      }
-
+    setTimeout(() => {
+      setActivity((prev) => ({
+        ...prev,
+        seatsLeft: Math.max(prev.seatsLeft - 1, 0),
+      }))
       setSubmitStatus('success')
-    } catch (submitFailure) {
-      const message =
-        submitFailure instanceof Error
-          ? submitFailure.message
-          : 'Unable to submit registration.'
-      setSubmitError(message)
-      setSubmitStatus('error')
-    }
+    }, 200)
   }
-
-  if (isLoading) {
-    return (
-      <div className="container">
-        <div className="status loading">
-          <span className="spinner" aria-hidden="true" />
-          Loading activity details from the API...
-        </div>
-      </div>
-    )
-  }
-
-  if (!activity || error) {
-    return (
-      <div className="container">
-        <section className="hero section-tight reveal">
-          <div>
-            <span className="badge">Activity details</span>
-            <h1>Activity unavailable</h1>
-            <p>We could not load this session right now.</p>
-          </div>
-          <div className="hero-card">
-            <h3>Next step</h3>
-            <p>Return to the calendar and choose another session.</p>
-            <div className="hero-actions">
-              <Link className="button primary" href="/calendar">
-                Back to calendar
-              </Link>
-            </div>
-          </div>
-        </section>
-        <div className="status error">{error || 'Activity not found.'}</div>
-      </div>
-    )
-  }
-
-  const seatFill =
-    activity.capacity > 0
-      ? Math.round(
-          ((activity.capacity - activity.seatsLeft) / activity.capacity) * 100
-        )
-      : 0
-  const isFull = activity.seatsLeft <= 0
-  const isLow = activity.seatsLeft > 0 && activity.seatsLeft <= 2
-  const availabilityNote = isFull
-    ? 'This session is currently full.'
-    : isLow
-      ? 'Only a few seats remain for this session.'
-      : null
 
   return (
     <div className="container">
@@ -302,9 +207,7 @@ export default function ActivityDetailPage({
           <div className="detail-tags">
             <span className="detail-pill">{activity.seatsLeft} seats left</span>
             <span className="detail-pill">Capacity {activity.capacity}</span>
-            {activity.cadence && (
-              <span className="detail-pill">{activity.cadence}</span>
-            )}
+            <span className="detail-pill">{activity.cadence}</span>
           </div>
           {availabilityNote && (
             <div className={`status ${isFull ? 'error' : 'warning'}`}>

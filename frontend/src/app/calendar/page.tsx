@@ -1,22 +1,8 @@
 ﻿'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
-
-type Activity = {
-  id: string
-  title: string
-  date: string
-  time: string
-  location: string
-  program: string
-  role: 'Participants' | 'Volunteers'
-  capacity: number
-  seatsLeft: number
-  cadence: string
-}
-
-const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+import { useMemo, useState } from 'react'
+import { sampleActivities, type Activity } from '../data/sampleData'
 
 export default function CalendarPage() {
   const [viewMode, setViewMode] = useState<'Month' | 'Week'>('Month')
@@ -24,10 +10,6 @@ export default function CalendarPage() {
   const [roleFilter, setRoleFilter] = useState('All roles')
   const [cadenceFilter, setCadenceFilter] = useState('All cadences')
   const [searchTerm, setSearchTerm] = useState('')
-  const [activities, setActivities] = useState<Activity[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [refreshKey, setRefreshKey] = useState(0)
 
   const programOptions = [
     'All programs',
@@ -38,67 +20,22 @@ export default function CalendarPage() {
   const roleOptions = ['All roles', 'Participants', 'Volunteers']
   const cadenceOptions = ['All cadences', 'Ad hoc', 'Weekly', 'Twice weekly']
 
-  useEffect(() => {
-    let isActive = true
-
-    const loadActivities = async () => {
-      setIsLoading(true)
-      setError(null)
-      setActivities([])
-
-      try {
-        const response = await fetch(`${apiBase}/api/activities`)
-        if (!response.ok) {
-          throw new Error('Unable to load schedule. Please try again.')
-        }
-        const payload = await response.json()
-        const data = Array.isArray(payload?.data)
-          ? payload.data
-          : Array.isArray(payload?.items)
-            ? payload.items
-            : []
-
-        if (isActive) {
-          setActivities(data)
-        }
-      } catch (loadError) {
-        if (isActive) {
-          const message =
-            loadError instanceof Error
-              ? loadError.message
-              : 'Unable to load schedule. Please try again.'
-          setError(message)
-        }
-      } finally {
-        if (isActive) {
-          setIsLoading(false)
-        }
-      }
-    }
-
-    void loadActivities()
-
-    return () => {
-      isActive = false
-    }
-  }, [apiBase, refreshKey])
-
   const summaryStats = useMemo(() => {
-    const participantSessions = activities.filter(
+    const participantSessions = sampleActivities.filter(
       (activity) => activity.role === 'Participants'
     ).length
-    const volunteerSessions = activities.filter(
+    const volunteerSessions = sampleActivities.filter(
       (activity) => activity.role === 'Volunteers'
     ).length
-    const uniqueDays = new Set(activities.map((activity) => activity.date)).size
+    const uniqueDays = new Set(sampleActivities.map((activity) => activity.date)).size
 
     return {
-      total: activities.length,
+      total: sampleActivities.length,
       participantSessions,
       volunteerSessions,
       uniqueDays,
     }
-  }, [activities])
+  }, [])
 
   const filtersActive =
     searchTerm.trim().length > 0 ||
@@ -116,7 +53,7 @@ export default function CalendarPage() {
   const filteredActivities = useMemo(() => {
     const searchLower = searchTerm.trim().toLowerCase()
 
-    return activities.filter((activity) => {
+    return sampleActivities.filter((activity) => {
       const matchesProgram =
         programFilter === 'All programs' || activity.program === programFilter
       const matchesRole = roleFilter === 'All roles' || activity.role === roleFilter
@@ -130,7 +67,7 @@ export default function CalendarPage() {
 
       return matchesProgram && matchesRole && matchesCadence && matchesSearch
     })
-  }, [activities, cadenceFilter, programFilter, roleFilter, searchTerm])
+  }, [cadenceFilter, programFilter, roleFilter, searchTerm])
 
   const groupedByDate = useMemo(() => {
     const groups = new Map<string, Activity[]>()
@@ -228,9 +165,7 @@ export default function CalendarPage() {
     )
   }
 
-  const statusLabel = isLoading
-    ? 'Loading schedule...'
-    : `${filteredActivities.length} activities matched`
+  const statusLabel = `${filteredActivities.length} sessions matched`
 
   return (
     <div className="container">
@@ -367,23 +302,7 @@ export default function CalendarPage() {
           </div>
         </div>
 
-        {isLoading ? (
-          <div className="status loading">
-            <span className="spinner" aria-hidden="true" />
-            Loading schedule from the API...
-          </div>
-        ) : error ? (
-          <div className="status error">
-            {error}
-            <button
-              className="button"
-              type="button"
-              onClick={() => setRefreshKey((value) => value + 1)}
-            >
-              Try again
-            </button>
-          </div>
-        ) : filteredActivities.length === 0 ? (
+        {filteredActivities.length === 0 ? (
           <div className="empty-state">
             <strong>No activities match those filters</strong>
             <span>Try switching to another program or role.</span>
