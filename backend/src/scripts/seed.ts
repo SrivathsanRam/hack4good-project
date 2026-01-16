@@ -8,7 +8,7 @@ const activities = [
   {
     id: 'act-01',
     title: 'Morning Movement',
-    date: '2024-04-10',
+    date: '2026-01-20',
     time: '09:30',
     location: 'Studio A',
     program: 'Movement',
@@ -21,33 +21,33 @@ const activities = [
   {
     id: 'act-02',
     title: 'Creative Collage Lab',
-    date: '2024-04-10',
+    date: '2026-01-20',
     time: '11:00',
     location: 'Art Room',
     program: 'Creative',
     role: 'Participants',
     capacity: 16,
-    seatsLeft: 16,
+    seatsLeft: 14,
     cadence: 'Weekly',
     description: 'Hands-on art session with guided materials.',
   },
   {
     id: 'act-03',
     title: 'Caregiver Circle',
-    date: '2024-04-11',
+    date: '2026-01-21',
     time: '14:00',
     location: 'Community Lounge',
     program: 'Caregiver sessions',
     role: 'Participants',
     capacity: 10,
-    seatsLeft: 10,
+    seatsLeft: 9,
     cadence: 'Ad hoc',
     description: 'Peer support and resource sharing for caregivers.',
   },
   {
     id: 'act-04',
     title: 'Movement Support Volunteer',
-    date: '2024-04-12',
+    date: '2026-01-22',
     time: '09:00',
     location: 'Studio A',
     program: 'Movement',
@@ -60,26 +60,26 @@ const activities = [
   {
     id: 'act-05',
     title: 'Creative Studio Setup',
-    date: '2024-04-12',
+    date: '2026-01-22',
     time: '10:30',
     location: 'Art Room',
     program: 'Creative',
     role: 'Volunteers',
     capacity: 6,
-    seatsLeft: 6,
+    seatsLeft: 4,
     cadence: 'Weekly',
     description: 'Help prepare materials and support artists.',
   },
   {
     id: 'act-06',
     title: 'Afternoon Movement',
-    date: '2024-04-13',
+    date: '2026-01-23',
     time: '15:00',
     location: 'Studio B',
     program: 'Movement',
     role: 'Participants',
     capacity: 14,
-    seatsLeft: 14,
+    seatsLeft: 10,
     cadence: 'Twice weekly',
     description: 'Midday movement session with adaptive options.',
   },
@@ -129,7 +129,12 @@ const seedDatabase = async () => {
     const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/hack4good'
     
     console.log('Connecting to MongoDB...')
-    await mongoose.connect(mongoURI)
+    console.log('URI:', mongoURI.replace(/\/\/.*:.*@/, '//<credentials>@')) // Log URI without password
+    
+    await mongoose.connect(mongoURI, {
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+    })
     console.log('✓ Connected to MongoDB')
 
     // Clear existing data

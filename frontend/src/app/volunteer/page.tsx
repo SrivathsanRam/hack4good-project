@@ -1,6 +1,54 @@
-﻿import Link from 'next/link'
+﻿'use client'
+
+import Link from 'next/link'
+import { useEffect, useState } from 'react'
+
+const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+
+type Activity = {
+  id: string
+  title: string
+  date: string
+  time: string
+  location: string
+  program: string
+  role: 'Participants' | 'Volunteers'
+  capacity: number
+  seatsLeft: number
+  cadence: string
+  description: string
+}
 
 export default function VolunteerPage() {
+  const [volunteerActivities, setVolunteerActivities] = useState<Activity[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchVolunteerActivities = async () => {
+      try {
+        const response = await fetch(`${apiBase}/api/activities?role=Volunteers`)
+        if (response.ok) {
+          const result = await response.json()
+          setVolunteerActivities(result.data || [])
+        }
+      } catch (err) {
+        console.error('Failed to fetch volunteer activities:', err)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchVolunteerActivities()
+  }, [])
+
+  const formatDate = (isoDate: string) => {
+    const date = new Date(`${isoDate}T00:00:00`)
+    return date.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+    })
+  }
+
   return (
     <div className="container">
       <section className="hero section-tight reveal">
@@ -20,8 +68,8 @@ export default function VolunteerPage() {
           </p>
           <div className="stat-row">
             <div className="stat-pill">
-              <span className="stat-pill-value">2</span>
-              <span className="stat-pill-label">Matches this week</span>
+              <span className="stat-pill-value">{volunteerActivities.length}</span>
+              <span className="stat-pill-label">Opportunities</span>
             </div>
             <div className="stat-pill">
               <span className="stat-pill-value">1</span>
@@ -39,92 +87,51 @@ export default function VolunteerPage() {
             These opportunities align with your interests and availability.
           </p>
         </div>
-        <div className="match-grid">
-          <article className="match-card">
-            <div className="match-header">
-              <span className="activity-time">09:00</span>
-              <span className="role-pill" data-variant="Volunteers">
-                Volunteer
-              </span>
-            </div>
-            <h3>Movement Support Volunteer</h3>
-            <p className="match-meta">Thu, Apr 12 - Studio A</p>
-            <div className="match-reasons">
-              <span className="match-reason">Morning friendly</span>
-              <span className="match-reason">Needs setup help</span>
-            </div>
-            <div className="activity-tags">
-              <span className="activity-tag" data-variant="Movement">
-                Movement
-              </span>
-              <span className="activity-tag" data-variant="Weekly">
-                Weekly
-              </span>
-            </div>
-            <div className="activity-footer">
-              <span className="activity-availability">2 of 4 slots open</span>
-              <Link className="button" href="/activity/act-04">
-                View details
-              </Link>
-            </div>
-          </article>
-          <article className="match-card">
-            <div className="match-header">
-              <span className="activity-time">10:30</span>
-              <span className="role-pill" data-variant="Volunteers">
-                Volunteer
-              </span>
-            </div>
-            <h3>Creative Studio Setup</h3>
-            <p className="match-meta">Thu, Apr 12 - Art Room</p>
-            <div className="match-reasons">
-              <span className="match-reason">Art support</span>
-              <span className="match-reason">Light lifting</span>
-            </div>
-            <div className="activity-tags">
-              <span className="activity-tag" data-variant="Creative">
-                Creative
-              </span>
-              <span className="activity-tag" data-variant="Weekly">
-                Weekly
-              </span>
-            </div>
-            <div className="activity-footer">
-              <span className="activity-availability">3 of 6 slots open</span>
-              <Link className="button" href="/activity/act-05">
-                View details
-              </Link>
-            </div>
-          </article>
-          <article className="match-card">
-            <div className="match-header">
-              <span className="activity-time">14:00</span>
-              <span className="role-pill" data-variant="Participants">
-                Support
-              </span>
-            </div>
-            <h3>Caregiver Circle Support</h3>
-            <p className="match-meta">Fri, Apr 13 - Community Lounge</p>
-            <div className="match-reasons">
-              <span className="match-reason">Listening role</span>
-              <span className="match-reason">Ad hoc</span>
-            </div>
-            <div className="activity-tags">
-              <span className="activity-tag" data-variant="Caregiver sessions">
-                Caregiver
-              </span>
-              <span className="activity-tag" data-variant="Ad hoc">
-                Ad hoc
-              </span>
-            </div>
-            <div className="activity-footer">
-              <span className="activity-availability">1 of 2 slots open</span>
-              <Link className="button" href="/activity/act-03">
-                View details
-              </Link>
-            </div>
-          </article>
-        </div>
+        {isLoading ? (
+          <div className="status loading">
+            <span className="spinner" aria-hidden="true" />
+            Loading volunteer opportunities...
+          </div>
+        ) : volunteerActivities.length === 0 ? (
+          <div className="empty-state">
+            <strong>No volunteer opportunities</strong>
+            <span>Check back later for new opportunities.</span>
+          </div>
+        ) : (
+          <div className="match-grid">
+            {volunteerActivities.map((activity) => (
+              <article key={activity.id} className="match-card">
+                <div className="match-header">
+                  <span className="activity-time">{activity.time}</span>
+                  <span className="role-pill" data-variant="Volunteers">
+                    Volunteer
+                  </span>
+                </div>
+                <h3>{activity.title}</h3>
+                <p className="match-meta">{formatDate(activity.date)} - {activity.location}</p>
+                <div className="match-reasons">
+                  <span className="match-reason">{activity.cadence}</span>
+                </div>
+                <div className="activity-tags">
+                  <span className="activity-tag" data-variant={activity.program}>
+                    {activity.program}
+                  </span>
+                  <span className="activity-tag" data-variant={activity.cadence}>
+                    {activity.cadence}
+                  </span>
+                </div>
+                <div className="activity-footer">
+                  <span className="activity-availability">
+                    {activity.seatsLeft} of {activity.capacity} slots open
+                  </span>
+                  <Link className="button" href={`/activity/${activity.id}`}>
+                    View details
+                  </Link>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="detail-grid reveal delay-2">
