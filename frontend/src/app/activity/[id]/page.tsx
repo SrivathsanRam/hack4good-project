@@ -1,20 +1,8 @@
 ﻿'use client'
 
 import Link from 'next/link'
-import { type FormEvent, useEffect, useState } from 'react'
-
-type Activity = {
-  id: string
-  title: string
-  date: string
-  time: string
-  location: string
-  program: string
-  seatsLeft: number
-  capacity: number
-  cadence?: string
-  description?: string
-}
+import { type FormEvent, useEffect, useMemo, useState } from 'react'
+import { sampleActivities, type Activity } from '../../data/sampleData'
 
 type FormState = {
   name: string
@@ -26,16 +14,32 @@ type FormState = {
   notes: string
 }
 
-const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+const fallbackActivity: Activity = {
+  id: 'act-placeholder',
+  title: 'Community Activity',
+  date: '2024-04-14',
+  time: '10:00',
+  location: 'Main Hall',
+  program: 'Community',
+  role: 'Participants',
+  capacity: 15,
+  seatsLeft: 6,
+  cadence: 'Ad hoc',
+  description: 'A shared session designed to bring everyone together.',
+}
 
 export default function ActivityDetailPage({
   params,
 }: {
   params: { id: string }
 }) {
-  const [activity, setActivity] = useState<Activity | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const resolvedActivity = useMemo(() => {
+    return sampleActivities.find((activity) => activity.id === params.id)
+  }, [params.id])
+
+  const [activity, setActivity] = useState<Activity>(
+    resolvedActivity || fallbackActivity
+  )
   const [form, setForm] = useState<FormState>({
     name: '',
     email: '',
@@ -52,48 +56,10 @@ export default function ActivityDetailPage({
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   useEffect(() => {
-    let isActive = true
-
-    const loadActivity = async () => {
-      setIsLoading(true)
-      setError(null)
-
-      try {
-        const response = await fetch(`${apiBase}/api/activities/${params.id}`)
-        if (!response.ok) {
-          throw new Error('Unable to load activity details. Please try again.')
-        }
-        const payload = await response.json()
-        const data = payload?.data
-
-        if (isActive) {
-          if (!data) {
-            throw new Error('Activity data is missing.')
-          }
-          setActivity(data)
-        }
-      } catch (loadError) {
-        if (isActive) {
-          const message =
-            loadError instanceof Error
-              ? loadError.message
-              : 'Unable to load activity details. Please try again.'
-          setError(message)
-          setActivity(null)
-        }
-      } finally {
-        if (isActive) {
-          setIsLoading(false)
-        }
-      }
-    }
-
-    void loadActivity()
-
-    return () => {
-      isActive = false
-    }
-  }, [apiBase, params.id])
+    setActivity(resolvedActivity || fallbackActivity)
+    setSubmitStatus('idle')
+    setSubmitError(null)
+  }, [resolvedActivity])
 
   const updateField = <Key extends keyof FormState>(
     key: Key,
@@ -133,10 +99,42 @@ export default function ActivityDetailPage({
     })
   }
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  const requiredFields = [
+    { label: 'Name', value: form.name.trim() },
+    { label: 'Email', value: form.email.trim() },
+    { label: 'Role', value: form.role },
+    { label: 'Cadence', value: form.membership },
+  ]
+  const completedSteps = requiredFields.filter((field) => field.value).length
+  const progressPercent =
+    requiredFields.length > 0
+      ? Math.round((completedSteps / requiredFields.length) * 100)
+      : 0
+
+  const seatFill =
+    activity.capacity > 0
+      ? Math.round(
+          ((activity.capacity - activity.seatsLeft) / activity.capacity) * 100
+        )
+      : 0
+  const isFull = activity.seatsLeft <= 0
+  const isLow = activity.seatsLeft > 0 && activity.seatsLeft <= 2
+  const availabilityNote = isFull
+    ? 'This session is currently full.'
+    : isLow
+      ? 'Only a few seats remain for this session.'
+      : null
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    if (!activity || submitStatus === 'submitting') {
+    if (submitStatus === 'submitting') {
+      return
+    }
+
+    if (activity.seatsLeft <= 0) {
+      setSubmitError('This session is full. Choose another activity.')
+      setSubmitStatus('error')
       return
     }
 
@@ -149,94 +147,73 @@ export default function ActivityDetailPage({
 
     setSubmitStatus('submitting')
 
-    try {
-      const response = await fetch(`${apiBase}/api/registrations`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          activityId: activity.id,
-          name: form.name,
-          email: form.email,
-          role: form.role,
-          membership: form.membership,
-          accessibility: form.accessibility,
-          caregiverPayment: form.caregiverPayment,
-          notes: form.notes,
-        }),
-      })
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null)
-        const message = payload?.error || 'Unable to submit registration.'
-        throw new Error(message)
-      }
-
+    setTimeout(() => {
+      setActivity((prev) => ({
+        ...prev,
+        seatsLeft: Math.max(prev.seatsLeft - 1, 0),
+      }))
       setSubmitStatus('success')
-    } catch (submitFailure) {
-      const message =
-        submitFailure instanceof Error
-          ? submitFailure.message
-          : 'Unable to submit registration.'
-      setSubmitError(message)
-      setSubmitStatus('error')
-    }
-  }
-
-  if (isLoading) {
-    return (
-      <div className="container">
-        <div className="status loading">
-          <span className="spinner" aria-hidden="true" />
-          Loading activity details from the API...
-        </div>
-      </div>
-    )
-  }
-
-  if (!activity || error) {
-    return (
-      <div className="container">
-        <section className="hero section-tight reveal">
-          <div>
-            <span className="badge">Activity details</span>
-            <h1>Activity unavailable</h1>
-            <p>We could not load this session right now.</p>
-          </div>
-          <div className="hero-card">
-            <h3>Next step</h3>
-            <p>Return to the calendar and choose another session.</p>
-            <div className="hero-actions">
-              <Link className="button primary" href="/calendar">
-                Back to calendar
-              </Link>
-            </div>
-          </div>
-        </section>
-        <div className="status error">{error || 'Activity not found.'}</div>
-      </div>
-    )
+    }, 200)
   }
 
   return (
     <div className="container">
       <section className="hero section-tight reveal">
-        <div>
-          <span className="badge">Activity details</span>
-          <h1>{activity.title}</h1>
-          <p>
-            {formatDate(activity.date)} at {activity.time} in{' '}
-            {activity.location}. Program: {activity.program}.
-          </p>
-          {activity.description && <p>{activity.description}</p>}
+        <div className="detail-stack">
+          <div>
+            <span className="badge">Activity details</span>
+            <h1>{activity.title}</h1>
+            <p>
+              {formatDate(activity.date)} at {activity.time} in{' '}
+              {activity.location}. Program: {activity.program}.
+            </p>
+            {activity.description && <p>{activity.description}</p>}
+          </div>
+
+          <div className="info-grid">
+            <div className="info-card">
+              <span className="info-label">Date</span>
+              <span className="info-value">{formatDate(activity.date)}</span>
+            </div>
+            <div className="info-card">
+              <span className="info-label">Time</span>
+              <span className="info-value">{activity.time}</span>
+            </div>
+            <div className="info-card">
+              <span className="info-label">Location</span>
+              <span className="info-value">{activity.location}</span>
+            </div>
+            <div className="info-card">
+              <span className="info-label">Program</span>
+              <span className="info-value">{activity.program}</span>
+            </div>
+          </div>
+
+          <div className="activity-progress">
+            <div
+              className="meter"
+              role="progressbar"
+              aria-valuenow={seatFill}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <span style={{ width: `${seatFill}%` }} />
+            </div>
+            <span className="activity-capacity">
+              {activity.seatsLeft} of {activity.capacity} seats left
+            </span>
+          </div>
+
           <div className="detail-tags">
             <span className="detail-pill">{activity.seatsLeft} seats left</span>
             <span className="detail-pill">Capacity {activity.capacity}</span>
-            {activity.cadence && (
-              <span className="detail-pill">{activity.cadence}</span>
-            )}
+            <span className="detail-pill">{activity.cadence}</span>
           </div>
+          {availabilityNote && (
+            <div className={`status ${isFull ? 'error' : 'warning'}`}>
+              {availabilityNote}
+            </div>
+          )}
         </div>
         <div className="hero-card">
           <h3>Registration checklist</h3>
@@ -257,6 +234,23 @@ export default function ActivityDetailPage({
             submission.
           </p>
           <form className="form" onSubmit={handleSubmit} noValidate>
+            <div className="form-progress">
+              <div className="progress-meta">
+                <span>Registration progress</span>
+                <span>
+                  {completedSteps} of {requiredFields.length} complete
+                </span>
+              </div>
+              <div
+                className="meter"
+                role="progressbar"
+                aria-valuenow={progressPercent}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              >
+                <span style={{ width: `${progressPercent}%` }} />
+              </div>
+            </div>
             <div className="form-row">
               <label className="form-field">
                 <span className="form-label">Full name *</span>
@@ -365,11 +359,13 @@ export default function ActivityDetailPage({
               <button
                 className="button primary"
                 type="submit"
-                disabled={submitStatus === 'submitting'}
+                disabled={submitStatus === 'submitting' || isFull}
               >
-                {submitStatus === 'submitting'
-                  ? 'Submitting...'
-                  : 'Submit registration'}
+                {isFull
+                  ? 'Session full'
+                  : submitStatus === 'submitting'
+                    ? 'Submitting...'
+                    : 'Submit registration'}
               </button>
               <button
                 className="button"
@@ -404,20 +400,36 @@ export default function ActivityDetailPage({
           </form>
         </div>
 
-        <aside className="detail-card">
-          <h2>Need help deciding?</h2>
+        <aside className="detail-card summary-card">
+          <h2>Registration summary</h2>
           <p className="detail-subtitle">
-            Staff can review special requests before the session begins.
+            Confirm the details you are about to submit.
           </p>
-          <ul className="detail-list">
-            <li>Share accessibility notes early.</li>
-            <li>Confirm caregiver payment details.</li>
-            <li>Volunteer coverage is limited by capacity.</li>
-          </ul>
-          <div className="empty-state" style={{ marginTop: '20px' }}>
+          <dl className="summary-list">
+            <div className="summary-row">
+              <dt>Role</dt>
+              <dd>{form.role || 'Not selected'}</dd>
+            </div>
+            <div className="summary-row">
+              <dt>Cadence</dt>
+              <dd>{form.membership || 'Not selected'}</dd>
+            </div>
+            <div className="summary-row">
+              <dt>Accessibility</dt>
+              <dd>{form.accessibility ? 'Yes' : 'No'}</dd>
+            </div>
+            <div className="summary-row">
+              <dt>Caregiver payment</dt>
+              <dd>{form.caregiverPayment ? 'Required' : 'Not needed'}</dd>
+            </div>
+          </dl>
+          <div className="empty-state">
             <strong>No conflicts detected</strong>
             <span>Membership rules will be enforced after submission.</span>
           </div>
+          <p className="summary-note">
+            Staff will review support notes before the session begins.
+          </p>
         </aside>
       </section>
     </div>
