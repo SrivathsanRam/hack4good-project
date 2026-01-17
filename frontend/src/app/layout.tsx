@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { DM_Serif_Display, Manrope } from 'next/font/google'
 import SiteHeader from './components/SiteHeader'
+import { ClientProviders } from './components/ClientProviders'
 import './globals.css'
 
 const bodyFont = Manrope({
@@ -29,24 +30,27 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${bodyFont.variable} ${displayFont.variable}`}>
       <body className="app-shell">
-        <div className="page">
-          <a className="skip-link" href="#main-content">
-            Skip to main content
-          </a>
-          <SiteHeader />
-          <main className="main-content" id="main-content">
-            {children}
-          </main>
-          <footer className="site-footer">
-            <div className="container footer-inner">
-              <p className="footer-title">One calendar. Less admin.</p>
-              <p className="footer-subtitle">
-                Prototype UI shell for unified activity scheduling.
-              </p>
-            </div>
-          </footer>
-        </div>
+        <ClientProviders>
+          <div className="page">
+            <a className="skip-link" href="#main-content">
+              Skip to main content
+            </a>
+            <SiteHeader />
+            <main className="main-content" id="main-content">
+              {children}
+            </main>
+            <footer className="site-footer">
+              <div className="container footer-inner">
+                <p className="footer-title">One calendar. Less admin.</p>
+                <p className="footer-subtitle">
+                  Prototype UI shell for unified activity scheduling.
+                </p>
+              </div>
+            </footer>
+          </div>
+        </ClientProviders>
       </body>
     </html>
   )
 }
+
