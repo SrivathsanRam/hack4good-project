@@ -1,8 +1,23 @@
 ﻿'use client'
 
 import Link from 'next/link'
-import { type FormEvent, useEffect, useMemo, useState } from 'react'
-import { sampleActivities, type Activity } from '../../data/sampleData'
+import { type FormEvent, useEffect, useState } from 'react'
+
+const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+
+type Activity = {
+  id: string
+  title: string
+  date: string
+  time: string
+  location: string
+  program: string
+  role: 'Participants' | 'Volunteers'
+  capacity: number
+  seatsLeft: number
+  cadence: string
+  description: string
+}
 
 type FormState = {
   name: string
@@ -14,32 +29,14 @@ type FormState = {
   notes: string
 }
 
-const fallbackActivity: Activity = {
-  id: 'act-placeholder',
-  title: 'Community Activity',
-  date: '2024-04-14',
-  time: '10:00',
-  location: 'Main Hall',
-  program: 'Community',
-  role: 'Participants',
-  capacity: 15,
-  seatsLeft: 6,
-  cadence: 'Ad hoc',
-  description: 'A shared session designed to bring everyone together.',
-}
-
 export default function ActivityDetailPage({
   params,
 }: {
   params: { id: string }
 }) {
-  const resolvedActivity = useMemo(() => {
-    return sampleActivities.find((activity) => activity.id === params.id)
-  }, [params.id])
-
-  const [activity, setActivity] = useState<Activity>(
-    resolvedActivity || fallbackActivity
-  )
+  const [activity, setActivity] = useState<Activity | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>({
     name: '',
     email: '',
@@ -55,11 +52,26 @@ export default function ActivityDetailPage({
   >('idle')
   const [submitError, setSubmitError] = useState<string | null>(null)
 
+  // Fetch activity from API
   useEffect(() => {
-    setActivity(resolvedActivity || fallbackActivity)
-    setSubmitStatus('idle')
-    setSubmitError(null)
-  }, [resolvedActivity])
+    const fetchActivity = async () => {
+      setIsLoading(true)
+      setError(null)
+      try {
+        const response = await fetch(`${apiBase}/api/activities/${params.id}`)
+        if (!response.ok) {
+          throw new Error('Activity not found')
+        }
+        const result = await response.json()
+        setActivity(result.data)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load activity')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchActivity()
+  }, [params.id])
 
   const updateField = <Key extends keyof FormState>(
     key: Key,
@@ -111,24 +123,47 @@ export default function ActivityDetailPage({
       ? Math.round((completedSteps / requiredFields.length) * 100)
       : 0
 
-  const seatFill =
-    activity.capacity > 0
-      ? Math.round(
-          ((activity.capacity - activity.seatsLeft) / activity.capacity) * 100
-        )
-      : 0
-  const isFull = activity.seatsLeft <= 0
-  const isLow = activity.seatsLeft > 0 && activity.seatsLeft <= 2
+  const seatFill = activity && activity.capacity > 0
+    ? Math.round(
+        ((activity.capacity - activity.seatsLeft) / activity.capacity) * 100
+      )
+    : 0
+  const isFull = activity ? activity.seatsLeft <= 0 : false
+  const isLow = activity ? activity.seatsLeft > 0 && activity.seatsLeft <= 2 : false
   const availabilityNote = isFull
     ? 'This session is currently full.'
     : isLow
       ? 'Only a few seats remain for this session.'
       : null
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  if (isLoading) {
+    return (
+      <div className="container">
+        <div className="status loading">
+          <span className="spinner" aria-hidden="true" />
+          Loading activity details...
+        </div>
+      </div>
+    )
+  }
+
+  if (error || !activity) {
+    return (
+      <div className="container">
+        <div className="status error">
+          {error || 'Activity not found'}
+          <Link className="button" href="/calendar">
+            Back to calendar
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    if (submitStatus === 'submitting') {
+    if (!activity || submitStatus === 'submitting') {
       return
     }
 
@@ -147,13 +182,37 @@ export default function ActivityDetailPage({
 
     setSubmitStatus('submitting')
 
-    setTimeout(() => {
-      setActivity((prev) => ({
+    try {
+      const response = await fetch(`${apiBase}/api/registrations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          activityId: activity.id,
+          name: form.name,
+          email: form.email,
+          role: form.role,
+          membership: form.membership,
+          accessibility: form.accessibility,
+          caregiverPayment: form.caregiverPayment,
+          notes: form.notes,
+        }),
+      })
+
+      if (!response.ok) {
+        const result = await response.json()
+        throw new Error(result.error || 'Failed to register')
+      }
+
+      // Update local activity state
+      setActivity((prev) => prev ? {
         ...prev,
         seatsLeft: Math.max(prev.seatsLeft - 1, 0),
-      }))
+      } : null)
       setSubmitStatus('success')
-    }, 200)
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Failed to register')
+      setSubmitStatus('error')
+    }
   }
 
   return (

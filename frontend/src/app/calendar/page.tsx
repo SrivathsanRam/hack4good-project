@@ -1,10 +1,28 @@
 ﻿'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
-import { sampleActivities, type Activity } from '../data/sampleData'
+import { useEffect, useMemo, useState } from 'react'
+
+const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+
+type Activity = {
+  id: string
+  title: string
+  date: string
+  time: string
+  location: string
+  program: string
+  role: 'Participants' | 'Volunteers'
+  capacity: number
+  seatsLeft: number
+  cadence: string
+  description: string
+}
 
 export default function CalendarPage() {
+  const [activities, setActivities] = useState<Activity[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'Month' | 'Week'>('Month')
   const [programFilter, setProgramFilter] = useState('All programs')
   const [roleFilter, setRoleFilter] = useState('All roles')
@@ -20,22 +38,43 @@ export default function CalendarPage() {
   const roleOptions = ['All roles', 'Participants', 'Volunteers']
   const cadenceOptions = ['All cadences', 'Ad hoc', 'Weekly', 'Twice weekly']
 
+  // Fetch activities from API
+  useEffect(() => {
+    const fetchActivities = async () => {
+      setIsLoading(true)
+      setError(null)
+      try {
+        const response = await fetch(`${apiBase}/api/activities`)
+        if (!response.ok) {
+          throw new Error('Failed to fetch activities')
+        }
+        const result = await response.json()
+        setActivities(result.data || [])
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load activities')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchActivities()
+  }, [])
+
   const summaryStats = useMemo(() => {
-    const participantSessions = sampleActivities.filter(
+    const participantSessions = activities.filter(
       (activity) => activity.role === 'Participants'
     ).length
-    const volunteerSessions = sampleActivities.filter(
+    const volunteerSessions = activities.filter(
       (activity) => activity.role === 'Volunteers'
     ).length
-    const uniqueDays = new Set(sampleActivities.map((activity) => activity.date)).size
+    const uniqueDays = new Set(activities.map((activity) => activity.date)).size
 
     return {
-      total: sampleActivities.length,
+      total: activities.length,
       participantSessions,
       volunteerSessions,
       uniqueDays,
     }
-  }, [])
+  }, [activities])
 
   const filtersActive =
     searchTerm.trim().length > 0 ||
@@ -53,7 +92,7 @@ export default function CalendarPage() {
   const filteredActivities = useMemo(() => {
     const searchLower = searchTerm.trim().toLowerCase()
 
-    return sampleActivities.filter((activity) => {
+    return activities.filter((activity) => {
       const matchesProgram =
         programFilter === 'All programs' || activity.program === programFilter
       const matchesRole = roleFilter === 'All roles' || activity.role === roleFilter
@@ -67,7 +106,7 @@ export default function CalendarPage() {
 
       return matchesProgram && matchesRole && matchesCadence && matchesSearch
     })
-  }, [cadenceFilter, programFilter, roleFilter, searchTerm])
+  }, [activities, cadenceFilter, programFilter, roleFilter, searchTerm])
 
   const groupedByDate = useMemo(() => {
     const groups = new Map<string, Activity[]>()
@@ -165,7 +204,31 @@ export default function CalendarPage() {
     )
   }
 
-  const statusLabel = `${filteredActivities.length} sessions matched`
+  const statusLabel = isLoading ? 'Loading...' : `${filteredActivities.length} sessions matched`
+
+  if (isLoading) {
+    return (
+      <div className="container">
+        <div className="status loading">
+          <span className="spinner" aria-hidden="true" />
+          Loading activities...
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="container">
+        <div className="status error">
+          {error}
+          <button className="button" type="button" onClick={() => window.location.reload()}>
+            Try again
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="container">

@@ -1,7 +1,22 @@
 ﻿'use client'
 
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
-import { sampleActivities, sampleRegistrations, type Activity } from '../data/sampleData'
+
+const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+
+type Activity = {
+  id: string
+  title: string
+  date: string
+  time: string
+  location: string
+  program: string
+  role: 'Participants' | 'Volunteers'
+  capacity: number
+  seatsLeft: number
+  cadence: string
+  description: string
+}
 
 type AttendanceRecord = {
   id: string
@@ -33,38 +48,62 @@ const emptyForm: ActivityFormState = {
   capacity: '',
 }
 
-const initialAttendance: AttendanceRecord[] = sampleRegistrations.map((record) => ({
-  id: record.id,
-  activityId: record.activityId,
-  name: record.name,
-  role: record.role,
-  attended: record.attended,
-}))
-
 export default function AdminPage() {
-  const [activities, setActivities] = useState<Activity[]>(sampleActivities)
-  const [attendance, setAttendance] = useState<AttendanceRecord[]>(initialAttendance)
+  const [activities, setActivities] = useState<Activity[]>([])
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState<ActivityFormState>(emptyForm)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   const [editingId, setEditingId] = useState<string | null>(null)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
-  const [selectedActivityId, setSelectedActivityId] = useState(
-    sampleActivities[0]?.id || ''
-  )
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'error'>('idle')
+  const [selectedActivityId, setSelectedActivityId] = useState('')
 
+  // Fetch activities from API
   useEffect(() => {
-    if (!selectedActivityId && activities.length > 0) {
-      setSelectedActivityId(activities[0].id)
-      return
+    const fetchActivities = async () => {
+      setIsLoading(true)
+      setError(null)
+      try {
+        const response = await fetch(`${apiBase}/api/activities`)
+        if (!response.ok) throw new Error('Failed to fetch activities')
+        const result = await response.json()
+        const data = result.data || []
+        setActivities(data)
+        if (data.length > 0 && !selectedActivityId) {
+          setSelectedActivityId(data[0].id)
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load activities')
+      } finally {
+        setIsLoading(false)
+      }
     }
-    if (
-      selectedActivityId &&
-      activities.length > 0 &&
-      !activities.some((activity) => activity.id === selectedActivityId)
-    ) {
-      setSelectedActivityId(activities[0].id)
+    fetchActivities()
+  }, [])
+
+  // Fetch attendance when selected activity changes
+  useEffect(() => {
+    if (!selectedActivityId) return
+    const fetchAttendance = async () => {
+      try {
+        const response = await fetch(`${apiBase}/api/registrations?activityId=${selectedActivityId}`)
+        if (!response.ok) throw new Error('Failed to fetch registrations')
+        const result = await response.json()
+        setAttendance((result.data || []).map((r: any) => ({
+          id: r.id,
+          activityId: r.activityId,
+          name: r.name,
+          role: r.role,
+          attended: r.attended,
+        })))
+      } catch (err) {
+        console.error('Failed to fetch attendance:', err)
+      }
     }
-  }, [activities, selectedActivityId])
+    fetchAttendance()
+  }, [selectedActivityId])
 
   const selectedActivity = useMemo(() => {
     return activities.find((activity) => activity.id === selectedActivityId)
@@ -140,58 +179,73 @@ export default function AdminPage() {
     return Object.keys(nextErrors).length === 0
   }
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setSaveMessage(null)
+    setSaveStatus('idle')
 
     if (!validate()) {
       return
     }
 
+    setSaveStatus('saving')
     const capacityValue = Number(form.capacity)
 
-    if (editingId) {
-      setActivities((prev) =>
-        prev.map((activity) =>
-          activity.id === editingId
-            ? {
-                ...activity,
-                title: form.title,
-                date: form.date,
-                time: form.time,
-                location: form.location,
-                program: form.program,
-                role: form.role as Activity['role'],
-                capacity: capacityValue,
-                seatsLeft: Math.min(activity.seatsLeft, capacityValue),
-                cadence: form.cadence,
-                description: activity.description,
-              }
-            : activity
+    try {
+      if (editingId) {
+        // Update existing activity
+        const response = await fetch(`${apiBase}/api/activities/${editingId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: form.title,
+            date: form.date,
+            time: form.time,
+            location: form.location,
+            program: form.program,
+            role: form.role,
+            capacity: capacityValue,
+            cadence: form.cadence,
+          }),
+        })
+        if (!response.ok) throw new Error('Failed to update activity')
+        const result = await response.json()
+        setActivities((prev) =>
+          prev.map((activity) =>
+            activity.id === editingId ? result.data : activity
+          )
         )
-      )
-      setSaveMessage('Activity updated successfully.')
-    } else {
-      const newActivity: Activity = {
-        id: `act-${Date.now()}`,
-        title: form.title,
-        date: form.date,
-        time: form.time,
-        location: form.location,
-        program: form.program,
-        role: form.role as Activity['role'],
-        capacity: capacityValue,
-        seatsLeft: capacityValue,
-        cadence: form.cadence,
-        description: 'Newly scheduled session for the coming week.',
+        setSaveMessage('Activity updated successfully.')
+      } else {
+        // Create new activity
+        const response = await fetch(`${apiBase}/api/activities`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: form.title,
+            date: form.date,
+            time: form.time,
+            location: form.location,
+            program: form.program,
+            role: form.role,
+            capacity: capacityValue,
+            cadence: form.cadence,
+            description: 'Newly scheduled session for the coming week.',
+          }),
+        })
+        if (!response.ok) throw new Error('Failed to create activity')
+        const result = await response.json()
+        setActivities((prev) => [result.data, ...prev])
+        setSaveMessage('Activity created successfully.')
       }
-      setActivities((prev) => [newActivity, ...prev])
-      setSaveMessage('Activity created successfully.')
+      setSaveStatus('idle')
+      setForm(emptyForm)
+      setFormErrors({})
+      setEditingId(null)
+    } catch (err) {
+      setSaveStatus('error')
+      setSaveMessage(err instanceof Error ? err.message : 'Failed to save activity')
     }
-
-    setForm(emptyForm)
-    setFormErrors({})
-    setEditingId(null)
   }
 
   const handleEdit = (activity: Activity) => {
@@ -216,14 +270,41 @@ export default function AdminPage() {
     setSaveMessage(null)
   }
 
-  const toggleAttendance = (recordId: string) => {
+  const toggleAttendance = async (recordId: string) => {
+    const record = attendance.find((r) => r.id === recordId)
+    if (!record) return
+
+    const newAttended = !record.attended
+    
+    // Optimistic update
     setAttendance((prev) =>
-      prev.map((record) =>
-        record.id === recordId
-          ? { ...record, attended: !record.attended }
-          : record
+      prev.map((r) =>
+        r.id === recordId ? { ...r, attended: newAttended } : r
       )
     )
+
+    try {
+      const response = await fetch(`${apiBase}/api/registrations/${recordId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attended: newAttended }),
+      })
+      if (!response.ok) {
+        // Revert on failure
+        setAttendance((prev) =>
+          prev.map((r) =>
+            r.id === recordId ? { ...r, attended: !newAttended } : r
+          )
+        )
+      }
+    } catch (err) {
+      // Revert on error
+      setAttendance((prev) =>
+        prev.map((r) =>
+          r.id === recordId ? { ...r, attended: !newAttended } : r
+        )
+      )
+    }
   }
 
   const downloadCsv = () => {
