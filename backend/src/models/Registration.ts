@@ -46,7 +46,7 @@ const RegistrationSchema = new Schema<IRegistration>(
     membership: {
       type: String,
       required: true,
-      enum: ['Ad hoc', 'Once a week', 'Twice a week', 'Three or more', 'Weekly'],
+      enum: ['Ad hoc', 'Weekly', 'Twice weekly', 'Three or more'],
     },
     accessibility: {
       type: Boolean,

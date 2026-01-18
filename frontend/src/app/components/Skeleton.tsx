@@ -1,5 +1,7 @@
 'use client'
 
+import type { CSSProperties } from 'react'
+
 interface SkeletonProps {
   className?: string
   width?: string | number
@@ -15,7 +17,7 @@ export function Skeleton({
   borderRadius,
   variant = 'rectangular',
 }: SkeletonProps) {
-  const variantStyles: Record<string, React.CSSProperties> = {
+  const variantStyles: Record<string, CSSProperties> = {
     text: {
       width: width || '100%',
       height: height || '1em',

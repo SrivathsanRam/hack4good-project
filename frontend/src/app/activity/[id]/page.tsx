@@ -23,7 +23,7 @@ type FormState = {
   name: string
   email: string
   role: '' | 'Participant' | 'Volunteer'
-  membership: '' | 'Ad hoc' | 'Once a week' | 'Twice a week' | 'Three or more'
+  membership: '' | 'Ad hoc' | 'Weekly' | 'Twice weekly' | 'Three or more'
   accessibility: boolean
   caregiverPayment: boolean
   notes: string
@@ -359,8 +359,8 @@ export default function ActivityDetailPage({
               <div className="radio-group">
                 {([
                   'Ad hoc',
-                  'Once a week',
-                  'Twice a week',
+                  'Weekly',
+                  'Twice weekly',
                   'Three or more',
                 ] as const).map((option) => (
                   <label key={option} className="radio-option">

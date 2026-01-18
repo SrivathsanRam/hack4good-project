@@ -24,18 +24,26 @@ export default function ParticipantPage() {
   const [activities, setActivities] = useState<Activity[]>([])
   const [registeredActivities] = useState<string[]>([]) // Track registered activities
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'upcoming' | 'registered' | 'history'>('upcoming')
 
   useEffect(() => {
     const fetchParticipantActivities = async () => {
+      setIsLoading(true)
+      setError(null)
       try {
         const response = await fetch(`${apiBase}/api/activities?role=Participants`)
         if (response.ok) {
           const result = await response.json()
           setActivities(result.data || [])
+        } else {
+          throw new Error('Failed to fetch participant activities')
         }
       } catch (err) {
-        console.error('Failed to fetch participant activities:', err)
+        setError(
+          err instanceof Error ? err.message : 'Failed to load activities'
+        )
+        setActivities([])
       } finally {
         setIsLoading(false)
       }
@@ -64,6 +72,23 @@ export default function ParticipantPage() {
     // For 'upcoming' and 'history', show all for now (would filter by date in real app)
     return true
   })
+
+  if (error) {
+    return (
+      <div className="container">
+        <div className="status error">
+          <span>{error} Ensure the backend is running at {apiBase}.</span>
+          <button
+            className="button"
+            type="button"
+            onClick={() => window.location.reload()}
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="container">

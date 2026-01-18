@@ -1,12 +1,10 @@
-<<<<<<< HEAD
-'use client'
+﻿'use client'
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import type { Activity } from '../data/sampleData'
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000'
+const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
 
 type ApiResponse<T> = {
   data?: T
@@ -31,22 +29,10 @@ type SignupState = {
 
 type Commitment = {
   activityId: string
-=======
-﻿'use client'
-
-import Link from 'next/link'
-import { useEffect, useState } from 'react'
-
-const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
-
-type Activity = {
-  id: string
->>>>>>> def313e1a92930bec4bfed74d499b6e46189777b
   title: string
   date: string
   time: string
   location: string
-<<<<<<< HEAD
 }
 
 const cadenceOptions: VolunteerProfile['cadence'][] = [
@@ -104,7 +90,7 @@ export default function VolunteerPage() {
 
       try {
         const response = await fetch(
-          `${API_BASE_URL}/api/activities?role=Volunteers`
+          `${apiBase}/api/activities?role=Volunteers`
         )
         const body = (await response.json().catch(() => null)) as
           | ApiResponse<Activity[]>
@@ -216,7 +202,7 @@ export default function VolunteerPage() {
     })
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/registrations`, {
+      const response = await fetch(`${apiBase}/api/registrations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -285,44 +271,6 @@ export default function VolunteerPage() {
     profile: profileReady,
     preferences: preferencesSaved,
     firstShift: commitments.length > 0,
-=======
-  program: string
-  role: 'Participants' | 'Volunteers'
-  capacity: number
-  seatsLeft: number
-  cadence: string
-  description: string
-}
-
-export default function VolunteerPage() {
-  const [volunteerActivities, setVolunteerActivities] = useState<Activity[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-
-  useEffect(() => {
-    const fetchVolunteerActivities = async () => {
-      try {
-        const response = await fetch(`${apiBase}/api/activities?role=Volunteers`)
-        if (response.ok) {
-          const result = await response.json()
-          setVolunteerActivities(result.data || [])
-        }
-      } catch (err) {
-        console.error('Failed to fetch volunteer activities:', err)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-    fetchVolunteerActivities()
-  }, [])
-
-  const formatDate = (isoDate: string) => {
-    const date = new Date(`${isoDate}T00:00:00`)
-    return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-    })
->>>>>>> def313e1a92930bec4bfed74d499b6e46189777b
   }
 
   return (
@@ -341,13 +289,8 @@ export default function VolunteerPage() {
           <p>Track matches, open slots, and your confirmed shifts.</p>
           <div className="stat-row">
             <div className="stat-pill">
-<<<<<<< HEAD
               <span className="stat-pill-value">{matchCount}</span>
               <span className="stat-pill-label">Matches this week</span>
-=======
-              <span className="stat-pill-value">{volunteerActivities.length}</span>
-              <span className="stat-pill-label">Opportunities</span>
->>>>>>> def313e1a92930bec4bfed74d499b6e46189777b
             </div>
             <div className="stat-pill">
               <span className="stat-pill-value">{openSlots}</span>
@@ -374,11 +317,17 @@ export default function VolunteerPage() {
             preferences.
           </p>
         </div>
-<<<<<<< HEAD
 
         {error && (
           <div className="status error">
-            {error} Ensure the backend is running at {API_BASE_URL}.
+            <span>{error} Ensure the backend is running at {apiBase}.</span>
+            <button
+              className="button"
+              type="button"
+              onClick={() => window.location.reload()}
+            >
+              Try again
+            </button>
           </div>
         )}
 
@@ -395,14 +344,11 @@ export default function VolunteerPage() {
           <div className="status error">{signupState.message}</div>
         )}
 
-=======
->>>>>>> def313e1a92930bec4bfed74d499b6e46189777b
         {isLoading ? (
           <div className="status loading">
             <span className="spinner" aria-hidden="true" />
             Loading volunteer opportunities...
           </div>
-<<<<<<< HEAD
         ) : filteredActivities.length === 0 ? (
           <div className="empty-state">
             <strong>No volunteer sessions match those preferences</strong>
@@ -474,46 +420,6 @@ export default function VolunteerPage() {
                 </article>
               )
             })}
-=======
-        ) : volunteerActivities.length === 0 ? (
-          <div className="empty-state">
-            <strong>No volunteer opportunities</strong>
-            <span>Check back later for new opportunities.</span>
-          </div>
-        ) : (
-          <div className="match-grid">
-            {volunteerActivities.map((activity) => (
-              <article key={activity.id} className="match-card">
-                <div className="match-header">
-                  <span className="activity-time">{activity.time}</span>
-                  <span className="role-pill" data-variant="Volunteers">
-                    Volunteer
-                  </span>
-                </div>
-                <h3>{activity.title}</h3>
-                <p className="match-meta">{formatDate(activity.date)} - {activity.location}</p>
-                <div className="match-reasons">
-                  <span className="match-reason">{activity.cadence}</span>
-                </div>
-                <div className="activity-tags">
-                  <span className="activity-tag" data-variant={activity.program}>
-                    {activity.program}
-                  </span>
-                  <span className="activity-tag" data-variant={activity.cadence}>
-                    {activity.cadence}
-                  </span>
-                </div>
-                <div className="activity-footer">
-                  <span className="activity-availability">
-                    {activity.seatsLeft} of {activity.capacity} slots open
-                  </span>
-                  <Link className="button" href={`/activity/${activity.id}`}>
-                    View details
-                  </Link>
-                </div>
-              </article>
-            ))}
->>>>>>> def313e1a92930bec4bfed74d499b6e46189777b
           </div>
         )}
       </section>

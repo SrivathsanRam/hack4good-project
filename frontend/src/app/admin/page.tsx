@@ -51,6 +51,7 @@ const emptyForm: ActivityFormState = {
 export default function AdminPage() {
   const [activities, setActivities] = useState<Activity[]>([])
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([])
+  const [attendanceError, setAttendanceError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState<ActivityFormState>(emptyForm)
@@ -76,6 +77,7 @@ export default function AdminPage() {
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load activities')
+        setActivities([])
       } finally {
         setIsLoading(false)
       }
@@ -87,6 +89,7 @@ export default function AdminPage() {
   useEffect(() => {
     if (!selectedActivityId) return
     const fetchAttendance = async () => {
+      setAttendanceError(null)
       try {
         const response = await fetch(`${apiBase}/api/registrations?activityId=${selectedActivityId}`)
         if (!response.ok) throw new Error('Failed to fetch registrations')
@@ -99,7 +102,10 @@ export default function AdminPage() {
           attended: r.attended,
         })))
       } catch (err) {
-        console.error('Failed to fetch attendance:', err)
+        setAttendanceError(
+          err instanceof Error ? err.message : 'Failed to load attendance.'
+        )
+        setAttendance([])
       }
     }
     fetchAttendance()
@@ -296,7 +302,10 @@ export default function AdminPage() {
             r.id === recordId ? { ...r, attended: !newAttended } : r
           )
         )
+        setAttendanceError('Failed to update attendance. Please try again.')
+        return
       }
+      setAttendanceError(null)
     } catch (err) {
       // Revert on error
       setAttendance((prev) =>
@@ -304,6 +313,7 @@ export default function AdminPage() {
           r.id === recordId ? { ...r, attended: !newAttended } : r
         )
       )
+      setAttendanceError('Failed to update attendance. Please try again.')
     }
   }
 
@@ -357,6 +367,19 @@ export default function AdminPage() {
           <p>Keep the schedule clean and let the platform handle reminders.</p>
         </div>
       </section>
+
+      {error && (
+        <div className="status error">
+          <span>{error} Ensure the backend is running at {apiBase}.</span>
+          <button
+            className="button"
+            type="button"
+            onClick={() => window.location.reload()}
+          >
+            Try again
+          </button>
+        </div>
+      )}
 
       <section className="section reveal delay-1">
         <div className="section-heading">
@@ -545,7 +568,11 @@ export default function AdminPage() {
               </button>
             </div>
 
-            {saveMessage && <div className="status success">{saveMessage}</div>}
+            {saveMessage && (
+              <div className={`status ${saveStatus === 'error' ? 'error' : 'success'}`}>
+                {saveMessage}
+              </div>
+            )}
           </form>
         </div>
 
@@ -632,6 +659,9 @@ export default function AdminPage() {
               ? `${checkedCount} of ${visibleAttendance.length} checked in`
               : 'No registrations yet for this session.'}
           </p>
+          {attendanceError && (
+            <div className="status error">{attendanceError}</div>
+          )}
           {visibleAttendance.length === 0 ? (
             <div className="empty-state">
               <strong>No attendance records</strong>
