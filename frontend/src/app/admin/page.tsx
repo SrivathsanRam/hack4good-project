@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { type FormEvent, useEffect, useMemo, useState } from 'react'
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 
 const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
 
@@ -52,6 +52,7 @@ export default function AdminPage() {
   const [activities, setActivities] = useState<Activity[]>([])
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([])
   const [attendanceError, setAttendanceError] = useState<string | null>(null)
+  const [attendanceMessage, setAttendanceMessage] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState<ActivityFormState>(emptyForm)
@@ -60,6 +61,39 @@ export default function AdminPage() {
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'error'>('idle')
   const [selectedActivityId, setSelectedActivityId] = useState('')
+  const [selectedActivityIds, setSelectedActivityIds] = useState<string[]>([])
+  const [bulkMessage, setBulkMessage] = useState<string | null>(null)
+  const [bulkStatus, setBulkStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle')
+
+  const loadAttendance = useCallback(
+    async (activityId: string) => {
+      if (!activityId) return
+      setAttendanceError(null)
+      setAttendanceMessage(null)
+      try {
+        const response = await fetch(
+          `${apiBase}/api/registrations?activityId=${activityId}`
+        )
+        if (!response.ok) throw new Error('Failed to fetch registrations')
+        const result = await response.json()
+        setAttendance(
+          (result.data || []).map((r: any) => ({
+            id: r.id,
+            activityId: r.activityId,
+            name: r.name,
+            role: r.role,
+            attended: r.attended,
+          }))
+        )
+      } catch (err) {
+        setAttendanceError(
+          err instanceof Error ? err.message : 'Failed to load attendance.'
+        )
+        setAttendance([])
+      }
+    },
+    [apiBase]
+  )
 
   // Fetch activities from API
   useEffect(() => {
@@ -85,31 +119,16 @@ export default function AdminPage() {
     fetchActivities()
   }, [])
 
+  useEffect(() => {
+    setSelectedActivityIds((prev) =>
+      prev.filter((id) => activities.some((activity) => activity.id === id))
+    )
+  }, [activities])
+
   // Fetch attendance when selected activity changes
   useEffect(() => {
-    if (!selectedActivityId) return
-    const fetchAttendance = async () => {
-      setAttendanceError(null)
-      try {
-        const response = await fetch(`${apiBase}/api/registrations?activityId=${selectedActivityId}`)
-        if (!response.ok) throw new Error('Failed to fetch registrations')
-        const result = await response.json()
-        setAttendance((result.data || []).map((r: any) => ({
-          id: r.id,
-          activityId: r.activityId,
-          name: r.name,
-          role: r.role,
-          attended: r.attended,
-        })))
-      } catch (err) {
-        setAttendanceError(
-          err instanceof Error ? err.message : 'Failed to load attendance.'
-        )
-        setAttendance([])
-      }
-    }
-    fetchAttendance()
-  }, [selectedActivityId])
+    loadAttendance(selectedActivityId)
+  }, [loadAttendance, selectedActivityId])
 
   const selectedActivity = useMemo(() => {
     return activities.find((activity) => activity.id === selectedActivityId)
@@ -143,6 +162,34 @@ export default function AdminPage() {
   ).length
   const lowCapacitySessions = useMemo(() => {
     return activities.filter((activity) => activity.seatsLeft <= 2)
+  }, [activities])
+
+  const totalCapacity = activities.reduce(
+    (sum, activity) => sum + activity.capacity,
+    0
+  )
+  const seatsUsed = activities.reduce(
+    (sum, activity) => sum + Math.max(activity.capacity - activity.seatsLeft, 0),
+    0
+  )
+  const utilizationRate =
+    totalCapacity > 0 ? Math.round((seatsUsed / totalCapacity) * 100) : 0
+  const openSeats = activities.reduce(
+    (sum, activity) => sum + Math.max(activity.seatsLeft, 0),
+    0
+  )
+
+  const programSummary = useMemo(() => {
+    const programLabels = ['Movement', 'Creative', 'Caregiver sessions']
+    const counts = programLabels.map((program) => ({
+      label: program,
+      count: activities.filter((activity) => activity.program === program).length,
+    }))
+    const total = counts.reduce((sum, item) => sum + item.count, 0)
+    return counts.map((item) => ({
+      ...item,
+      percent: total > 0 ? Math.round((item.count / total) * 100) : 0,
+    }))
   }, [activities])
 
   const updateFormField = <Key extends keyof ActivityFormState>(
@@ -276,11 +323,135 @@ export default function AdminPage() {
     setSaveMessage(null)
   }
 
+  const toggleActivitySelection = (activityId: string) => {
+    setSelectedActivityIds((prev) =>
+      prev.includes(activityId)
+        ? prev.filter((id) => id !== activityId)
+        : [...prev, activityId]
+    )
+    setBulkMessage(null)
+    setBulkStatus('idle')
+  }
+
+  const selectAllActivities = () => {
+    setSelectedActivityIds(activities.map((activity) => activity.id))
+    setBulkMessage(null)
+    setBulkStatus('idle')
+  }
+
+  const clearSelection = () => {
+    setSelectedActivityIds([])
+    setBulkMessage(null)
+    setBulkStatus('idle')
+  }
+
+  const applyBulkCapacity = async (increment: number) => {
+    if (selectedActivityIds.length === 0) return
+    setBulkStatus('running')
+    setBulkMessage(null)
+
+    try {
+      const results = await Promise.allSettled(
+        selectedActivityIds.map(async (id) => {
+          const activity = activities.find((item) => item.id === id)
+          if (!activity) {
+            throw new Error('Activity not found.')
+          }
+          const nextCapacity = Math.max(activity.capacity + increment, 1)
+          const response = await fetch(`${apiBase}/api/activities/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ capacity: nextCapacity }),
+          })
+          if (!response.ok) {
+            throw new Error('Failed to update activity.')
+          }
+          const result = await response.json()
+          return result.data as Activity
+        })
+      )
+
+      const updated = results.flatMap((result) =>
+        result.status === 'fulfilled' ? [result.value] : []
+      )
+      const failures = results.filter((result) => result.status === 'rejected').length
+
+      if (updated.length > 0) {
+        setActivities((prev) =>
+          prev.map(
+            (activity) =>
+              updated.find((item) => item.id === activity.id) || activity
+          )
+        )
+      }
+
+      if (failures > 0) {
+        setBulkStatus('error')
+        setBulkMessage(`${failures} updates failed. Review and try again.`)
+      } else {
+        setBulkStatus('success')
+        setBulkMessage('Capacity updated for selected sessions.')
+      }
+    } catch (err) {
+      setBulkStatus('error')
+      setBulkMessage(err instanceof Error ? err.message : 'Bulk update failed.')
+    }
+  }
+
+  const applyBulkDelete = async () => {
+    if (selectedActivityIds.length === 0) return
+    const confirmed = window.confirm(
+      `Delete ${selectedActivityIds.length} activities? This cannot be undone.`
+    )
+    if (!confirmed) return
+
+    setBulkStatus('running')
+    setBulkMessage(null)
+
+    const results = await Promise.allSettled(
+      selectedActivityIds.map((id) =>
+        fetch(`${apiBase}/api/activities/${id}`, { method: 'DELETE' })
+      )
+    )
+
+    const deletedIds: string[] = []
+    const failedIds: string[] = []
+
+    results.forEach((result, index) => {
+      const id = selectedActivityIds[index]
+      if (result.status === 'fulfilled' && result.value.ok) {
+        deletedIds.push(id)
+      } else {
+        failedIds.push(id)
+      }
+    })
+
+    const remainingActivities = activities.filter(
+      (activity) => !deletedIds.includes(activity.id)
+    )
+    setActivities(remainingActivities)
+    setSelectedActivityIds(failedIds)
+
+    if (selectedActivityId && deletedIds.includes(selectedActivityId)) {
+      setSelectedActivityId(remainingActivities[0]?.id ?? '')
+      setAttendance([])
+    }
+
+    if (failedIds.length > 0) {
+      setBulkStatus('error')
+      setBulkMessage(`${failedIds.length} deletions failed. Try again.`)
+    } else {
+      setBulkStatus('success')
+      setBulkMessage('Selected activities deleted.')
+    }
+  }
+
   const toggleAttendance = async (recordId: string) => {
     const record = attendance.find((r) => r.id === recordId)
     if (!record) return
 
     const newAttended = !record.attended
+    setAttendanceMessage(null)
     
     // Optimistic update
     setAttendance((prev) =>
@@ -314,6 +485,51 @@ export default function AdminPage() {
         )
       )
       setAttendanceError('Failed to update attendance. Please try again.')
+    }
+  }
+
+  const handleBulkAttendance = async (attended: boolean) => {
+    if (visibleAttendance.length === 0) return
+
+    setAttendanceError(null)
+    setAttendanceMessage(null)
+
+    setAttendance((prev) =>
+      prev.map((record) =>
+        record.activityId === selectedActivityId ? { ...record, attended } : record
+      )
+    )
+
+    try {
+      const results = await Promise.allSettled(
+        visibleAttendance.map((record) =>
+          fetch(`${apiBase}/api/registrations/${record.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ attended }),
+          })
+        )
+      )
+
+      const failed = results.filter((result) => {
+        if (result.status === 'rejected') {
+          return true
+        }
+        return !result.value.ok
+      }).length
+
+      if (failed > 0) {
+        setAttendanceError('Some attendance updates failed. Please try again.')
+        loadAttendance(selectedActivityId)
+        return
+      }
+
+      setAttendanceMessage(
+        `Attendance updated for ${visibleAttendance.length} registrations.`
+      )
+    } catch (err) {
+      setAttendanceError('Failed to update attendance. Please try again.')
+      loadAttendance(selectedActivityId)
     }
   }
 
@@ -380,6 +596,12 @@ export default function AdminPage() {
           </button>
         </div>
       )}
+      {isLoading && (
+        <div className="status loading">
+          <span className="spinner" aria-hidden="true" />
+          Loading activities...
+        </div>
+      )}
 
       <section className="section reveal delay-1">
         <div className="section-heading">
@@ -413,6 +635,50 @@ export default function AdminPage() {
               {nextSession
                 ? `${nextSession.date} at ${nextSession.time}`
                 : 'Add a session to get started.'}
+            </span>
+          </div>
+        </div>
+        <div className="insight-grid">
+          <div className="insight-card">
+            <span className="insight-title">Capacity utilization</span>
+            <span className="insight-value">{utilizationRate}%</span>
+            <span className="insight-meta">
+              {seatsUsed} of {totalCapacity} seats in use.
+            </span>
+          </div>
+          <div className="insight-card">
+            <span className="insight-title">Open seats</span>
+            <span className="insight-value">{openSeats}</span>
+            <span className="insight-meta">
+              Remaining capacity across all sessions.
+            </span>
+          </div>
+          <div className="insight-card">
+            <span className="insight-title">Low capacity alerts</span>
+            <span className="insight-value">{lowCapacitySessions.length}</span>
+            <span className="insight-meta">
+              Sessions with two or fewer seats left.
+            </span>
+          </div>
+          <div className="insight-card">
+            <span className="insight-title">Program mix</span>
+            {activities.length === 0 ? (
+              <span className="insight-meta">No sessions to analyze yet.</span>
+            ) : (
+              <div className="mini-chart">
+                {programSummary.map((item) => (
+                  <div key={item.label} className="chart-row">
+                    <span className="chart-label">{item.label}</span>
+                    <div className="chart-bar">
+                      <span style={{ width: `${item.percent}%` }} />
+                    </div>
+                    <span className="chart-value">{item.count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <span className="insight-meta">
+              {participantSessions} participant, {volunteerSessions} volunteer.
             </span>
           </div>
         </div>
@@ -581,6 +847,53 @@ export default function AdminPage() {
           <p className="detail-subtitle">
             Review the schedule and jump into edit mode when details change.
           </p>
+          <div className="bulk-toolbar">
+            <div className="bulk-info">
+              <span className="bulk-count">{selectedActivityIds.length} selected</span>
+              <span className="bulk-meta">Select sessions to apply bulk actions.</span>
+            </div>
+            <div className="bulk-actions">
+              <button
+                className="button"
+                type="button"
+                onClick={selectAllActivities}
+                disabled={activities.length === 0 || bulkStatus === 'running'}
+              >
+                Select all
+              </button>
+              <button
+                className="button ghost"
+                type="button"
+                onClick={clearSelection}
+                disabled={selectedActivityIds.length === 0 || bulkStatus === 'running'}
+              >
+                Clear
+              </button>
+              <button
+                className="button ghost"
+                type="button"
+                onClick={() => applyBulkCapacity(2)}
+                disabled={selectedActivityIds.length === 0 || bulkStatus === 'running'}
+              >
+                Add 2 seats
+              </button>
+              <button
+                className="button"
+                type="button"
+                onClick={applyBulkDelete}
+                disabled={selectedActivityIds.length === 0 || bulkStatus === 'running'}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+          {bulkMessage && (
+            <div
+              className={`status ${bulkStatus === 'error' ? 'error' : 'success'}`}
+            >
+              {bulkMessage}
+            </div>
+          )}
           {activities.length === 0 ? (
             <div className="empty-state">
               <strong>No activities yet</strong>
@@ -590,6 +903,13 @@ export default function AdminPage() {
             <div className="admin-list">
               {activities.map((activity) => (
                 <div key={activity.id} className="admin-item">
+                  <label className="selection-control">
+                    <input
+                      type="checkbox"
+                      checked={selectedActivityIds.includes(activity.id)}
+                      onChange={() => toggleActivitySelection(activity.id)}
+                    />
+                  </label>
                   <div>
                     <h3>{activity.title}</h3>
                     <p className="admin-meta">
@@ -659,8 +979,35 @@ export default function AdminPage() {
               ? `${checkedCount} of ${visibleAttendance.length} checked in`
               : 'No registrations yet for this session.'}
           </p>
+          {attendanceMessage && (
+            <div className="status success">{attendanceMessage}</div>
+          )}
           {attendanceError && (
             <div className="status error">{attendanceError}</div>
+          )}
+          {visibleAttendance.length > 0 && (
+            <div className="bulk-toolbar compact">
+              <div className="bulk-info">
+                <span className="bulk-count">{visibleAttendance.length} records</span>
+                <span className="bulk-meta">Update attendance in one pass.</span>
+              </div>
+              <div className="bulk-actions">
+                <button
+                  className="button"
+                  type="button"
+                  onClick={() => handleBulkAttendance(true)}
+                >
+                  Mark all present
+                </button>
+                <button
+                  className="button ghost"
+                  type="button"
+                  onClick={() => handleBulkAttendance(false)}
+                >
+                  Mark all absent
+                </button>
+              </div>
+            </div>
           )}
           {visibleAttendance.length === 0 ? (
             <div className="empty-state">

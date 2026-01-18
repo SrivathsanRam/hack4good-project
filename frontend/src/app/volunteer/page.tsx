@@ -15,7 +15,7 @@ type ApiResponse<T> = {
 type VolunteerProfile = {
   name: string
   email: string
-  cadence: 'Ad hoc' | 'Weekly' | 'Twice weekly' | 'Three or more'
+  cadence: 'All cadences' | 'Ad hoc' | 'Weekly' | 'Twice weekly' | 'Three or more'
   program: string
   morning: boolean
   afternoon: boolean
@@ -36,6 +36,7 @@ type Commitment = {
 }
 
 const cadenceOptions: VolunteerProfile['cadence'][] = [
+  'All cadences',
   'Ad hoc',
   'Weekly',
   'Twice weekly',
@@ -58,6 +59,12 @@ const parseHour = (time: string) => {
   return Number.isNaN(hour) ? null : hour
 }
 
+const sortByDateTime = (a: Activity, b: Activity) => {
+  const dateA = new Date(`${a.date}T${a.time || '00:00'}`)
+  const dateB = new Date(`${b.date}T${b.time || '00:00'}`)
+  return dateA.getTime() - dateB.getTime()
+}
+
 export default function VolunteerPage() {
   const [activities, setActivities] = useState<Activity[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -65,7 +72,7 @@ export default function VolunteerPage() {
   const [profile, setProfile] = useState<VolunteerProfile>({
     name: '',
     email: '',
-    cadence: 'Ad hoc',
+    cadence: 'All cadences',
     program: 'All programs',
     morning: true,
     afternoon: true,
@@ -135,12 +142,18 @@ export default function VolunteerPage() {
     return Array.from(options)
   }, [activities])
 
+  const cadencePreference =
+    profile.cadence === 'All cadences' ? null : profile.cadence
+
   const filteredActivities = useMemo(() => {
     return activities.filter((activity) => {
       if (activity.role !== 'Volunteers') {
         return false
       }
       if (profile.program !== 'All programs' && activity.program !== profile.program) {
+        return false
+      }
+      if (cadencePreference && activity.cadence !== cadencePreference) {
         return false
       }
       if (!profile.morning && !profile.afternoon) {
@@ -154,7 +167,7 @@ export default function VolunteerPage() {
       const isAfternoon = hour >= 12
       return (profile.morning && isMorning) || (profile.afternoon && isAfternoon)
     })
-  }, [activities, profile.program, profile.morning, profile.afternoon])
+  }, [activities, cadencePreference, profile.program, profile.morning, profile.afternoon])
 
   const profileReady =
     profile.name.trim().length > 0 && isValidEmail(profile.email)
@@ -167,6 +180,50 @@ export default function VolunteerPage() {
   const lowCapacityCount = filteredActivities.filter(
     (activity) => activity.seatsLeft > 0 && activity.seatsLeft <= 2
   ).length
+
+  const sortedFilteredActivities = useMemo(() => {
+    return [...filteredActivities].sort(sortByDateTime)
+  }, [filteredActivities])
+
+  const nextShift = sortedFilteredActivities[0]
+
+  const uniqueDays = new Set(filteredActivities.map((activity) => activity.date))
+    .size
+
+  const matchRate =
+    activities.length > 0
+      ? Math.round((filteredActivities.length / activities.length) * 100)
+      : 0
+
+  const programSummary = useMemo(() => {
+    const programLabels = ['Movement', 'Creative', 'Caregiver sessions']
+    const counts = programLabels.map((program) => ({
+      label: program,
+      count: filteredActivities.filter(
+        (activity) => activity.program === program
+      ).length,
+    }))
+    const total = counts.reduce((sum, item) => sum + item.count, 0)
+    return counts.map((item) => ({
+      ...item,
+      percent: total > 0 ? Math.round((item.count / total) * 100) : 0,
+    }))
+  }, [filteredActivities])
+
+  const scheduleBuckets = useMemo(() => {
+    const groups = new Map<string, Activity[]>()
+    for (const activity of sortedFilteredActivities) {
+      const group = groups.get(activity.date)
+      if (group) {
+        group.push(activity)
+      } else {
+        groups.set(activity.date, [activity])
+      }
+    }
+    return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+  }, [sortedFilteredActivities])
+
+  const scheduleDays = scheduleBuckets.slice(0, 4)
 
   const updateProfile = <Key extends keyof VolunteerProfile>(
     key: Key,
@@ -210,7 +267,8 @@ export default function VolunteerPage() {
           name: profile.name.trim(),
           email: profile.email.trim(),
           role: 'Volunteer',
-          membership: profile.cadence,
+          membership:
+            profile.cadence === 'All cadences' ? activity.cadence : profile.cadence,
           accessibility: false,
           caregiverPayment: false,
           notes: '',
@@ -310,6 +368,65 @@ export default function VolunteerPage() {
 
       <section className="section reveal delay-1">
         <div className="section-heading">
+          <span className="section-eyebrow">Insights</span>
+          <h2 className="section-title">Volunteer scheduling signals</h2>
+          <p className="section-subtitle">
+            Track upcoming shifts, match quality, and program coverage before you
+            commit.
+          </p>
+        </div>
+        <div className="insight-grid">
+          <div className="insight-card">
+            <span className="insight-title">Next shift</span>
+            <span className="insight-value">
+              {nextShift ? formatShortDate(nextShift.date) : 'No sessions'}
+            </span>
+            <span className="insight-meta">
+              {nextShift
+                ? `${nextShift.title} at ${nextShift.time}`
+                : 'Check back for new opportunities.'}
+            </span>
+          </div>
+          <div className="insight-card">
+            <span className="insight-title">Open slots</span>
+            <span className="insight-value">{openSlots}</span>
+            <span className="insight-meta">
+              {lowCapacityCount} sessions at low capacity.
+            </span>
+          </div>
+          <div className="insight-card">
+            <span className="insight-title">Preference match</span>
+            <span className="insight-value">{matchRate}%</span>
+            <span className="insight-meta">
+              {cadencePreference
+                ? `Cadence: ${cadencePreference}`
+                : 'All cadences shown.'}
+            </span>
+          </div>
+          <div className="insight-card">
+            <span className="insight-title">Program mix</span>
+            {filteredActivities.length === 0 ? (
+              <span className="insight-meta">No sessions to analyze yet.</span>
+            ) : (
+              <div className="mini-chart">
+                {programSummary.map((item) => (
+                  <div key={item.label} className="chart-row">
+                    <span className="chart-label">{item.label}</span>
+                    <div className="chart-bar">
+                      <span style={{ width: `${item.percent}%` }} />
+                    </div>
+                    <span className="chart-value">{item.count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <span className="insight-meta">{uniqueDays} days with openings.</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="section reveal delay-1">
+        <div className="section-heading">
           <span className="section-eyebrow">Suggested sessions</span>
           <h2 className="section-title">Priority matches for you</h2>
           <p className="section-subtitle">
@@ -365,6 +482,13 @@ export default function VolunteerPage() {
               const isSubmitting =
                 signupState.status === 'submitting' &&
                 signupState.activityId === activity.id
+              const matchesProgram =
+                profile.program === 'All programs' || activity.program === profile.program
+              const matchesCadence =
+                !cadencePreference || activity.cadence === cadencePreference
+              const hour = parseHour(activity.time)
+              const isMorningSlot = hour !== null && hour < 12
+              const isAfternoonSlot = hour !== null && hour >= 12
 
               return (
                 <article key={activity.id} className="match-card">
@@ -381,6 +505,17 @@ export default function VolunteerPage() {
                   <div className="match-reasons">
                     <span className="match-reason">{activity.program}</span>
                     <span className="match-reason">{activity.cadence}</span>
+                    {profile.program !== 'All programs' && matchesProgram && (
+                      <span className="match-reason">Program match</span>
+                    )}
+                    {cadencePreference && matchesCadence && (
+                      <span className="match-reason">Cadence match</span>
+                    )}
+                    {hour !== null && (
+                      <span className="match-reason">
+                        {isMorningSlot ? 'Morning' : 'Afternoon'} slot
+                      </span>
+                    )}
                     {isLow && (
                       <span className="alert-pill" data-variant="low">
                         Low seats
@@ -420,6 +555,83 @@ export default function VolunteerPage() {
                 </article>
               )
             })}
+          </div>
+        )}
+      </section>
+
+      <section className="section reveal delay-2" id="volunteer-schedule">
+        <div className="section-heading">
+          <span className="section-eyebrow">Schedule planner</span>
+          <h2 className="section-title">Build your volunteer week</h2>
+          <p className="section-subtitle">
+            Review openings by day and claim shifts that fit your availability.
+          </p>
+        </div>
+
+        {scheduleDays.length === 0 ? (
+          <div className="empty-state">
+            <strong>No schedule view yet</strong>
+            <span>Adjust your preferences to see day-by-day openings.</span>
+          </div>
+        ) : (
+          <div className="schedule-grid">
+            {scheduleDays.map(([date, items]) => (
+              <div key={date} className="schedule-day">
+                <div className="schedule-day-header">
+                  <span className="schedule-day-title">{formatShortDate(date)}</span>
+                  <span className="schedule-day-meta">
+                    {items.length} sessions
+                  </span>
+                </div>
+                <div className="schedule-slots">
+                  {items.map((activity) => {
+                    const isFull = activity.seatsLeft <= 0
+                    const isCommitted = commitments.some(
+                      (commitment) => commitment.activityId === activity.id
+                    )
+                    const isSubmitting =
+                      signupState.status === 'submitting' &&
+                      signupState.activityId === activity.id
+
+                    return (
+                      <div key={activity.id} className="schedule-slot">
+                        <div>
+                          <span className="schedule-time">{activity.time}</span>
+                          <h4 className="schedule-title">{activity.title}</h4>
+                          <span className="schedule-meta">
+                            {activity.location}
+                          </span>
+                        </div>
+                        <div className="schedule-actions">
+                          <span className="schedule-availability">
+                            {activity.seatsLeft} slots
+                          </span>
+                          <button
+                            className="button ghost"
+                            type="button"
+                            onClick={() => handleSignup(activity)}
+                            disabled={
+                              !profileReady ||
+                              isFull ||
+                              isCommitted ||
+                              isSubmitting
+                            }
+                          >
+                            {isCommitted
+                              ? 'Claimed'
+                              : isFull
+                                ? 'Full'
+                                : isSubmitting
+                                  ? 'Submitting...'
+                                  : 'Claim'}
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </section>
@@ -537,6 +749,21 @@ export default function VolunteerPage() {
         </div>
 
         <div className="detail-card">
+          <h2>Volunteer guidance</h2>
+          <p className="detail-subtitle">
+            Keep your schedule predictable and communicate early.
+          </p>
+          <ul className="detail-list">
+            <li>Claim shifts at least 48 hours in advance when possible.</li>
+            <li>Check for low-capacity alerts before confirming.</li>
+            <li>Share changes with staff if availability shifts.</li>
+          </ul>
+          <div className="status warning">
+            Save preferences to refresh the recommended schedule.
+          </div>
+        </div>
+
+        <div className="detail-card">
           <h2>Your upcoming shifts</h2>
           <p className="detail-subtitle">
             Shifts you have claimed during this session.
@@ -545,6 +772,18 @@ export default function VolunteerPage() {
             <div className="empty-state">
               <strong>No shifts claimed yet</strong>
               <span>Select a session above to add it to your schedule.</span>
+              <button
+                className="button"
+                type="button"
+                onClick={() => {
+                  const anchor = document.getElementById('volunteer-schedule')
+                  if (anchor) {
+                    anchor.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                  }
+                }}
+              >
+                View schedule planner
+              </button>
             </div>
           ) : (
             <div className="admin-list">
