@@ -908,6 +908,7 @@ export default function AdminPage() {
                       type="checkbox"
                       checked={selectedActivityIds.includes(activity.id)}
                       onChange={() => toggleActivitySelection(activity.id)}
+                      aria-label={`Select ${activity.title}`}
                     />
                   </label>
                   <div>

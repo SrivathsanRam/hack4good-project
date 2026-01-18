@@ -19,6 +19,8 @@ type Activity = {
   description: string
 }
 
+type DateRangeOption = 'All' | 'Next 7 days' | 'Next 30 days'
+
 export default function CalendarPage() {
   const [activities, setActivities] = useState<Activity[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -27,6 +29,7 @@ export default function CalendarPage() {
   const [programFilter, setProgramFilter] = useState('All programs')
   const [roleFilter, setRoleFilter] = useState('All roles')
   const [cadenceFilter, setCadenceFilter] = useState('All cadences')
+  const [dateRange, setDateRange] = useState<DateRangeOption>('All')
   const [searchTerm, setSearchTerm] = useState('')
 
   const programOptions = [
@@ -37,6 +40,7 @@ export default function CalendarPage() {
   ]
   const roleOptions = ['All roles', 'Participants', 'Volunteers']
   const cadenceOptions = ['All cadences', 'Ad hoc', 'Weekly', 'Twice weekly']
+  const dateRangeOptions: DateRangeOption[] = ['All', 'Next 7 days', 'Next 30 days']
 
   // Fetch activities from API
   useEffect(() => {
@@ -80,17 +84,23 @@ export default function CalendarPage() {
     searchTerm.trim().length > 0 ||
     programFilter !== 'All programs' ||
     roleFilter !== 'All roles' ||
-    cadenceFilter !== 'All cadences'
+    cadenceFilter !== 'All cadences' ||
+    dateRange !== 'All'
 
   const resetFilters = () => {
     setProgramFilter('All programs')
     setRoleFilter('All roles')
     setCadenceFilter('All cadences')
+    setDateRange('All')
     setSearchTerm('')
   }
 
   const filteredActivities = useMemo(() => {
     const searchLower = searchTerm.trim().toLowerCase()
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const rangeDays =
+      dateRange === 'Next 7 days' ? 7 : dateRange === 'Next 30 days' ? 30 : null
 
     return activities.filter((activity) => {
       const matchesProgram =
@@ -98,15 +108,83 @@ export default function CalendarPage() {
       const matchesRole = roleFilter === 'All roles' || activity.role === roleFilter
       const matchesCadence =
         cadenceFilter === 'All cadences' || activity.cadence === cadenceFilter
+      const matchesDate =
+        rangeDays === null
+          ? true
+          : (() => {
+              const activityDate = new Date(`${activity.date}T00:00:00`)
+              const diffDays =
+                (activityDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+              return diffDays >= 0 && diffDays <= rangeDays
+            })()
       const matchesSearch =
         !searchLower ||
         [activity.title, activity.location, activity.program, activity.cadence]
           .filter(Boolean)
           .some((value) => value.toLowerCase().includes(searchLower))
 
-      return matchesProgram && matchesRole && matchesCadence && matchesSearch
+      return (
+        matchesProgram &&
+        matchesRole &&
+        matchesCadence &&
+        matchesSearch &&
+        matchesDate
+      )
     })
-  }, [activities, cadenceFilter, programFilter, roleFilter, searchTerm])
+  }, [
+    activities,
+    cadenceFilter,
+    dateRange,
+    programFilter,
+    roleFilter,
+    searchTerm,
+  ])
+
+  const openSeats = useMemo(() => {
+    return filteredActivities.reduce(
+      (total, activity) => total + Math.max(activity.seatsLeft, 0),
+      0
+    )
+  }, [filteredActivities])
+
+  const lowCapacityCount = useMemo(() => {
+    return filteredActivities.filter(
+      (activity) => activity.seatsLeft > 0 && activity.seatsLeft <= 2
+    ).length
+  }, [filteredActivities])
+
+  const uniqueDays = useMemo(() => {
+    return new Set(filteredActivities.map((activity) => activity.date)).size
+  }, [filteredActivities])
+
+  const nextActivity = useMemo(() => {
+    const sorted = [...filteredActivities].sort((a, b) => {
+      const dateA = new Date(`${a.date}T${a.time || '00:00'}`)
+      const dateB = new Date(`${b.date}T${b.time || '00:00'}`)
+      return dateA.getTime() - dateB.getTime()
+    })
+    return sorted[0]
+  }, [filteredActivities])
+
+  const matchRate =
+    activities.length > 0
+      ? Math.round((filteredActivities.length / activities.length) * 100)
+      : 0
+
+  const programSummary = useMemo(() => {
+    const programLabels = ['Movement', 'Creative', 'Caregiver sessions']
+    const counts = programLabels.map((program) => ({
+      label: program,
+      count: filteredActivities.filter(
+        (activity) => activity.program === program
+      ).length,
+    }))
+    const total = counts.reduce((sum, item) => sum + item.count, 0)
+    return counts.map((item) => ({
+      ...item,
+      percent: total > 0 ? Math.round((item.count / total) * 100) : 0,
+    }))
+  }, [filteredActivities])
 
   const groupedByDate = useMemo(() => {
     const groups = new Map<string, Activity[]>()
@@ -277,6 +355,62 @@ export default function CalendarPage() {
         </div>
       </section>
 
+      <section className="section reveal delay-1">
+        <div className="section-heading">
+          <span className="section-eyebrow">Insights</span>
+          <h2 className="section-title">Calendar focus</h2>
+          <p className="section-subtitle">
+            See what is coming up and where there is still availability.
+          </p>
+        </div>
+        <div className="insight-grid">
+          <div className="insight-card">
+            <span className="insight-title">Next session</span>
+            <span className="insight-value">
+              {nextActivity ? formatDay(nextActivity.date) : 'No sessions'}
+            </span>
+            <span className="insight-meta">
+              {nextActivity
+                ? `${nextActivity.title} at ${nextActivity.time}`
+                : 'Add a session to get started.'}
+            </span>
+          </div>
+          <div className="insight-card">
+            <span className="insight-title">Open seats</span>
+            <span className="insight-value">{openSeats}</span>
+            <span className="insight-meta">
+              {lowCapacityCount} sessions are close to full.
+            </span>
+          </div>
+          <div className="insight-card">
+            <span className="insight-title">Filters applied</span>
+            <span className="insight-value">{matchRate}%</span>
+            <span className="insight-meta">
+              {filteredActivities.length} of {activities.length} sessions matched.
+            </span>
+          </div>
+          <div className="insight-card">
+            <span className="insight-title">Program mix</span>
+            {filteredActivities.length === 0 ? (
+              <span className="insight-meta">No sessions to analyze yet.</span>
+            ) : (
+              <div className="mini-chart">
+                {programSummary.map((item) => (
+                  <div key={item.label} className="chart-row">
+                    <span className="chart-label">{item.label}</span>
+                    <div className="chart-bar">
+                      <span style={{ width: `${item.percent}%` }} />
+                    </div>
+                    <span className="chart-value">{item.count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <span className="insight-meta">{uniqueDays} days scheduled.</span>
+          </div>
+        </div>
+      </section>
+
       <section className="reveal delay-1">
         <div className="calendar-controls">
           <div className="toolbar">
@@ -325,6 +459,19 @@ export default function CalendarPage() {
           </div>
 
           <div className="filters">
+            <span className="filter-label">Date range</span>
+            {dateRangeOptions.map((option) => (
+              <button
+                key={option}
+                type="button"
+                className={`chip ${dateRange === option ? 'active' : ''}`}
+                onClick={() => setDateRange(option)}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+          <div className="filters">
             <span className="filter-label">Program</span>
             {programOptions.map((option) => (
               <button
@@ -368,7 +515,7 @@ export default function CalendarPage() {
         {filteredActivities.length === 0 ? (
           <div className="empty-state">
             <strong>No activities match those filters</strong>
-            <span>Try switching to another program or role.</span>
+            <span>Try switching date range, program, role, or cadence.</span>
             {filtersActive && (
               <button className="button" type="button" onClick={resetFilters}>
                 Reset filters
@@ -404,6 +551,22 @@ export default function CalendarPage() {
             ))}
           </div>
         )}
+      </section>
+
+      <section className="callout reveal delay-2">
+        <h2>Need to make schedule changes?</h2>
+        <p>
+          Jump into the staff console to add sessions, adjust capacity, or track
+          attendance updates.
+        </p>
+        <div className="callout-actions">
+          <Link className="button primary" href="/admin">
+            Open staff console
+          </Link>
+          <Link className="button ghost" href="/volunteer">
+            Volunteer view
+          </Link>
+        </div>
       </section>
     </div>
   )

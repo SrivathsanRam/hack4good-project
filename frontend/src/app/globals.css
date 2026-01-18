@@ -1366,6 +1366,7 @@ a {
   border: 1px solid var(--line);
   background: #fff;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .schedule-time {

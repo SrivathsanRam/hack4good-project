@@ -37,6 +37,9 @@ export default function ActivityDetailPage({
   const [activity, setActivity] = useState<Activity | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [relatedActivities, setRelatedActivities] = useState<Activity[]>([])
+  const [relatedError, setRelatedError] = useState<string | null>(null)
+  const [isRelatedLoading, setIsRelatedLoading] = useState(false)
   const [form, setForm] = useState<FormState>({
     name: '',
     email: '',
@@ -72,6 +75,68 @@ export default function ActivityDetailPage({
     }
     fetchActivity()
   }, [params.id])
+
+  useEffect(() => {
+    if (!activity) {
+      return
+    }
+    const suggestedRole =
+      activity.role === 'Participants' ? 'Participant' : 'Volunteer'
+    setForm((prev) => (prev.role ? prev : { ...prev, role: suggestedRole }))
+  }, [activity])
+
+  useEffect(() => {
+    if (!activity) {
+      return
+    }
+
+    let isMounted = true
+
+    const loadRelated = async () => {
+      setIsRelatedLoading(true)
+      setRelatedError(null)
+
+      try {
+        const response = await fetch(
+          `${apiBase}/api/activities?program=${encodeURIComponent(
+            activity.program
+          )}&role=${encodeURIComponent(activity.role)}`
+        )
+        if (!response.ok) {
+          throw new Error('Failed to load related sessions')
+        }
+        const result = await response.json()
+        const items = (result.data || []) as Activity[]
+        const filtered = items.filter((item) => item.id !== activity.id)
+        const sorted = filtered.sort((a, b) => {
+          const dateA = new Date(`${a.date}T${a.time || '00:00'}`)
+          const dateB = new Date(`${b.date}T${b.time || '00:00'}`)
+          return dateA.getTime() - dateB.getTime()
+        })
+
+        if (isMounted) {
+          setRelatedActivities(sorted.slice(0, 3))
+        }
+      } catch (err) {
+        if (isMounted) {
+          setRelatedError(
+            err instanceof Error ? err.message : 'Failed to load related sessions'
+          )
+          setRelatedActivities([])
+        }
+      } finally {
+        if (isMounted) {
+          setIsRelatedLoading(false)
+        }
+      }
+    }
+
+    loadRelated()
+
+    return () => {
+      isMounted = false
+    }
+  }, [activity])
 
   const updateField = <Key extends keyof FormState>(
     key: Key,
@@ -135,6 +200,13 @@ export default function ActivityDetailPage({
     : isLow
       ? 'Only a few seats remain for this session.'
       : null
+  const recommendedRole = activity
+    ? activity.role === 'Participants'
+      ? 'Participant'
+      : 'Volunteer'
+    : null
+  const roleMismatch =
+    recommendedRole && form.role && form.role !== recommendedRole
 
   if (isLoading) {
     return (
@@ -264,6 +336,7 @@ export default function ActivityDetailPage({
           </div>
 
           <div className="detail-tags">
+            <span className="detail-pill">{activity.role}</span>
             <span className="detail-pill">{activity.seatsLeft} seats left</span>
             <span className="detail-pill">Capacity {activity.capacity}</span>
             <span className="detail-pill">{activity.cadence}</span>
@@ -470,6 +543,10 @@ export default function ActivityDetailPage({
               <dd>{form.role || 'Not selected'}</dd>
             </div>
             <div className="summary-row">
+              <dt>Recommended role</dt>
+              <dd>{recommendedRole || 'Not available'}</dd>
+            </div>
+            <div className="summary-row">
               <dt>Cadence</dt>
               <dd>{form.membership || 'Not selected'}</dd>
             </div>
@@ -482,6 +559,11 @@ export default function ActivityDetailPage({
               <dd>{form.caregiverPayment ? 'Required' : 'Not needed'}</dd>
             </div>
           </dl>
+          {roleMismatch && (
+            <div className="status warning">
+              This session is intended for {recommendedRole?.toLowerCase()}s.
+            </div>
+          )}
           <div className="empty-state">
             <strong>No conflicts detected</strong>
             <span>Membership rules will be enforced after submission.</span>
@@ -490,6 +572,92 @@ export default function ActivityDetailPage({
             Staff will review support notes before the session begins.
           </p>
         </aside>
+      </section>
+
+      <section className="section reveal delay-2">
+        <div className="section-heading">
+          <span className="section-eyebrow">Next steps</span>
+          <h2 className="section-title">Prepare and explore</h2>
+          <p className="section-subtitle">
+            Review related sessions and confirm any support notes before you
+            arrive.
+          </p>
+        </div>
+
+        {relatedError && <div className="status error">{relatedError}</div>}
+
+        {isRelatedLoading ? (
+          <div className="status loading">
+            <span className="spinner" aria-hidden="true" />
+            Loading related sessions...
+          </div>
+        ) : relatedActivities.length === 0 ? (
+          <div className="empty-state">
+            <strong>No related sessions yet</strong>
+            <span>Check back for more sessions in this program.</span>
+          </div>
+        ) : (
+          <div className="match-grid">
+            {relatedActivities.map((item) => (
+              <article key={item.id} className="match-card">
+                <div className="match-header">
+                  <span className="activity-time">{item.time}</span>
+                  <span className="role-pill" data-variant={item.role}>
+                    {item.role === 'Participants' ? 'Participant' : 'Volunteer'}
+                  </span>
+                </div>
+                <h3>{item.title}</h3>
+                <p className="match-meta">
+                  {formatDate(item.date)} - {item.location}
+                </p>
+                <div className="activity-tags">
+                  <span className="activity-tag" data-variant={item.program}>
+                    {item.program}
+                  </span>
+                  <span className="activity-tag" data-variant={item.cadence}>
+                    {item.cadence}
+                  </span>
+                </div>
+                <div className="activity-footer">
+                  <span className="activity-availability">
+                    {item.seatsLeft} seats left
+                  </span>
+                  <Link className="button" href={`/activity/${item.id}`}>
+                    View details
+                  </Link>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+
+        <div className="detail-grid reveal delay-2">
+          <div className="detail-card">
+            <h2>Support checklist</h2>
+            <p className="detail-subtitle">
+              Share any access needs so staff can prepare the room in advance.
+            </p>
+            <ul className="detail-list">
+              <li>Confirm mobility or seating preferences in the notes.</li>
+              <li>Flag caregiver payment needs if required.</li>
+              <li>Arrive 10 minutes early for a calm check-in.</li>
+            </ul>
+          </div>
+          <div className="detail-card">
+            <h2>Registration tips</h2>
+            <p className="detail-subtitle">
+              Double-check role and cadence before submitting your registration.
+            </p>
+            <ul className="detail-list">
+              <li>Attendance is shared with staff after submission.</li>
+              <li>Low capacity sessions may close quickly.</li>
+              <li>Contact staff if you need to adjust later.</li>
+            </ul>
+            <div className="status warning">
+              Keep your email active for confirmation updates.
+            </div>
+          </div>
+        </div>
       </section>
     </div>
   )
