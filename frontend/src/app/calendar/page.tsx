@@ -207,7 +207,7 @@ export default function CalendarPage() {
 
   if (isLoading) {
     return (
-      <div className="container">
+      <div className="container-wide">
         <div className="status loading">
           <span className="spinner" aria-hidden="true" />
           Loading activities...
@@ -218,7 +218,7 @@ export default function CalendarPage() {
 
   if (error) {
     return (
-      <div className="container">
+      <div className="container-wide">
         <div className="status error">
           {error}
           <button className="button" type="button" onClick={() => window.location.reload()}>
@@ -230,7 +230,7 @@ export default function CalendarPage() {
   }
 
   return (
-    <div className="container">
+    <div className="container-wide">
       <section className="hero section-tight reveal">
         <div>
           <span className="badge">Calendar view</span>

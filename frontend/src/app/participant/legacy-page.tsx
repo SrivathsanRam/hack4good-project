@@ -69,7 +69,9 @@ const formatDate = (isoDate: string) => {
 }
 
 const parseHour = (time: string) => {
-  const hour = Number(time.split(':')[0])
+  const safe = time || '00:00'
+  const [hours, minutes] = safe.split(':')
+  const hour = Number(hours)
   return Number.isNaN(hour) ? null : hour
 }
 

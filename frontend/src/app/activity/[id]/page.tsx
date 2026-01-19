@@ -88,8 +88,7 @@ export default function ActivityDetailPage({
     if (!activity) {
       return
     }
-    const suggestedRole =
-      activity.role === 'Participants' ? 'Participant' : 'Volunteer'
+    const suggestedRole = activity.role
     setForm((prev) => (prev.role ? prev : { ...prev, role: suggestedRole }))
   }, [activity])
 
@@ -185,7 +184,8 @@ export default function ActivityDetailPage({
   }
 
   const formatTime = (time: string) => {
-    const [hours, minutes] = time.split(':')
+    const safe = time || '00:00'
+    const [hours, minutes] = safe.split(':')
     const hour = parseInt(hours, 10)
     const ampm = hour >= 12 ? 'PM' : 'AM'
     const displayHour = hour % 12 || 12
@@ -217,9 +217,9 @@ export default function ActivityDetailPage({
       ? 'Only a few seats remain for this session.'
       : null
   const recommendedRole = activity
-    ? activity.role === 'Participants'
-      ? 'Participant'
-      : 'Volunteer'
+    ? activity.role === 'Participant'
+      ? activity.role
+      : activity.role
     : null
   const roleMismatch =
     recommendedRole && form.role && form.role !== recommendedRole

@@ -40,7 +40,7 @@ export default function DayCell({
         )}
       </div>
       <div className="day-activities">
-        {activities.slice(0, 3).map((activity) => (
+        {activities.slice(0, 4).map((activity) => (
           <ActivityCard
             key={activity.id}
             activity={activity}
@@ -48,8 +48,8 @@ export default function DayCell({
             compact
           />
         ))}
-        {activities.length > 3 && (
-          <span className="more-activities">+{activities.length - 3} more</span>
+        {activities.length > 4 && (
+          <span className="more-activities">+{activities.length - 4} more</span>
         )}
       </div>
     </div>
