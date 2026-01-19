@@ -4,14 +4,22 @@ export interface IActivity extends Document {
   id: string
   title: string
   date: string
-  time: string
+  startTime: string
+  endTime: string
   location: string
+  coordinates: {
+    lat: number
+    lng: number
+  }
   program: string
   role: 'Participants' | 'Volunteers'
   capacity: number
   seatsLeft: number
   cadence: string
   description: string
+  wheelchairAccessible: boolean
+  paymentRequired: boolean
+  paymentAmount?: number
   createdAt: Date
   updatedAt: Date
 }
@@ -32,7 +40,11 @@ const ActivitySchema = new Schema<IActivity>(
       type: String,
       required: true,
     },
-    time: {
+    startTime: {
+      type: String,
+      required: true,
+    },
+    endTime: {
       type: String,
       required: true,
     },
@@ -40,6 +52,16 @@ const ActivitySchema = new Schema<IActivity>(
       type: String,
       required: true,
       trim: true,
+    },
+    coordinates: {
+      lat: {
+        type: Number,
+        required: true,
+      },
+      lng: {
+        type: Number,
+        required: true,
+      },
     },
     program: {
       type: String,
@@ -69,6 +91,23 @@ const ActivitySchema = new Schema<IActivity>(
     description: {
       type: String,
       default: '',
+    },
+    wheelchairAccessible: {
+      type: Boolean,
+      required: true,
+      default: false,
+    },
+    paymentRequired: {
+      type: Boolean,
+      required: true,
+      default: false,
+    },
+    paymentAmount: {
+      type: Number,
+      min: 0,
+      required: function(this: IActivity) {
+        return this.paymentRequired;
+      },
     },
   },
   {

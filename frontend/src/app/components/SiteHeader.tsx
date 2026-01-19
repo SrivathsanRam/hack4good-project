@@ -7,9 +7,9 @@ import { useState, useEffect } from 'react'
 const navItems = [
   { label: 'Home', href: '/' },
   { label: 'Calendar', href: '/calendar' },
-  { label: 'Volunteer', href: '/volunteer' },
-  { label: 'Participant', href: '/participant' },
-  { label: 'Staff Console', href: '/admin' },
+  { label: 'Participant', href: '/participant/auth' },
+  { label: 'Volunteer', href: '/volunteer/auth' },
+  { label: 'Staff', href: '/admin/auth' },
 ]
 
 export default function SiteHeader() {

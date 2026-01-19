@@ -9,14 +9,22 @@ type Activity = {
   id: string
   title: string
   date: string
-  time: string
+  startTime: string
+  endTime: string
   location: string
   program: string
-  role: 'Participants' | 'Volunteers'
+  role: 'Participant' | 'Volunteer'
   capacity: number
   seatsLeft: number
   cadence: string
   description: string
+  wheelchairAccessible?: boolean
+  paymentRequired?: boolean
+  paymentAmount?: number
+  coordinates?: {
+    lat: number
+    lng: number
+  }
 }
 
 type FormState = {
@@ -109,8 +117,8 @@ export default function ActivityDetailPage({
         const items = (result.data || []) as Activity[]
         const filtered = items.filter((item) => item.id !== activity.id)
         const sorted = filtered.sort((a, b) => {
-          const dateA = new Date(`${a.date}T${a.time || '00:00'}`)
-          const dateB = new Date(`${b.date}T${b.time || '00:00'}`)
+          const dateA = new Date(`${a.date}T${a.startTime || '00:00'}`)
+          const dateB = new Date(`${b.date}T${b.startTime || '00:00'}`)
           return dateA.getTime() - dateB.getTime()
         })
 
@@ -174,6 +182,14 @@ export default function ActivityDetailPage({
       day: 'numeric',
       year: 'numeric',
     })
+  }
+
+  const formatTime = (time: string) => {
+    const [hours, minutes] = time.split(':')
+    const hour = parseInt(hours, 10)
+    const ampm = hour >= 12 ? 'PM' : 'AM'
+    const displayHour = hour % 12 || 12
+    return `${displayHour}:${minutes} ${ampm}`
   }
 
   const requiredFields = [
@@ -295,7 +311,7 @@ export default function ActivityDetailPage({
             <span className="badge">Activity details</span>
             <h1>{activity.title}</h1>
             <p>
-              {formatDate(activity.date)} at {activity.time} in{' '}
+              {formatDate(activity.date)} at {formatTime(activity.startTime)} - {formatTime(activity.endTime)} in{' '}
               {activity.location}. Program: {activity.program}.
             </p>
             {activity.description && <p>{activity.description}</p>}
@@ -308,7 +324,7 @@ export default function ActivityDetailPage({
             </div>
             <div className="info-card">
               <span className="info-label">Time</span>
-              <span className="info-value">{activity.time}</span>
+              <span className="info-value">{formatTime(activity.startTime)} - {formatTime(activity.endTime)}</span>
             </div>
             <div className="info-card">
               <span className="info-label">Location</span>
@@ -601,9 +617,9 @@ export default function ActivityDetailPage({
             {relatedActivities.map((item) => (
               <article key={item.id} className="match-card">
                 <div className="match-header">
-                  <span className="activity-time">{item.time}</span>
+                  <span className="activity-time">{formatTime(item.startTime)}</span>
                   <span className="role-pill" data-variant={item.role}>
-                    {item.role === 'Participants' ? 'Participant' : 'Volunteer'}
+                    {item.role}
                   </span>
                 </div>
                 <h3>{item.title}</h3>

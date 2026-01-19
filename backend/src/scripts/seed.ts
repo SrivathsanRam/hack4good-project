@@ -1,6 +1,6 @@
 import mongoose from 'mongoose'
 import dotenv from 'dotenv'
-import { Activity, Registration } from '../models'
+import { Activity, Registration, User } from '../models'
 
 dotenv.config()
 
@@ -9,79 +9,105 @@ const activities = [
     id: 'act-01',
     title: 'Morning Movement',
     date: '2026-01-20',
-    time: '09:30',
+    startTime: '09:30',
+    endTime: '10:30',
     location: 'Studio A',
+    coordinates: { lat: 1.3521, lng: 103.8198 },
     program: 'Movement',
     role: 'Participants',
     capacity: 12,
     seatsLeft: 10,
     cadence: 'Weekly',
     description: 'Gentle movement and stretching for all mobility levels.',
+    wheelchairAccessible: true,
+    paymentRequired: false,
   },
   {
     id: 'act-02',
     title: 'Creative Collage Lab',
     date: '2026-01-20',
-    time: '11:00',
+    startTime: '11:00',
+    endTime: '12:30',
     location: 'Art Room',
+    coordinates: { lat: 1.3525, lng: 103.8201 },
     program: 'Creative',
     role: 'Participants',
     capacity: 16,
     seatsLeft: 14,
     cadence: 'Weekly',
     description: 'Hands-on art session with guided materials.',
+    wheelchairAccessible: true,
+    paymentRequired: true,
+    paymentAmount: 15,
   },
   {
     id: 'act-03',
     title: 'Caregiver Circle',
     date: '2026-01-21',
-    time: '14:00',
+    startTime: '14:00',
+    endTime: '15:30',
     location: 'Community Lounge',
+    coordinates: { lat: 1.3518, lng: 103.8195 },
     program: 'Caregiver sessions',
     role: 'Participants',
     capacity: 10,
     seatsLeft: 9,
     cadence: 'Ad hoc',
     description: 'Peer support and resource sharing for caregivers.',
+    wheelchairAccessible: true,
+    paymentRequired: false,
   },
   {
     id: 'act-04',
     title: 'Movement Support Volunteer',
     date: '2026-01-22',
-    time: '09:00',
+    startTime: '09:00',
+    endTime: '10:00',
     location: 'Studio A',
+    coordinates: { lat: 1.3521, lng: 103.8198 },
     program: 'Movement',
     role: 'Volunteers',
     capacity: 4,
     seatsLeft: 3,
     cadence: 'Weekly',
     description: 'Assist facilitators with setup and participant check-in.',
+    wheelchairAccessible: true,
+    paymentRequired: false,
   },
   {
     id: 'act-05',
     title: 'Creative Studio Setup',
     date: '2026-01-22',
-    time: '10:30',
+    startTime: '10:30',
+    endTime: '11:30',
     location: 'Art Room',
+    coordinates: { lat: 1.3525, lng: 103.8201 },
     program: 'Creative',
     role: 'Volunteers',
     capacity: 6,
     seatsLeft: 4,
     cadence: 'Weekly',
     description: 'Help prepare materials and support artists.',
+    wheelchairAccessible: false,
+    paymentRequired: false,
   },
   {
     id: 'act-06',
     title: 'Afternoon Movement',
     date: '2026-01-23',
-    time: '15:00',
+    startTime: '15:00',
+    endTime: '16:00',
     location: 'Studio B',
+    coordinates: { lat: 1.3530, lng: 103.8210 },
     program: 'Movement',
     role: 'Participants',
     capacity: 14,
     seatsLeft: 10,
     cadence: 'Twice weekly',
     description: 'Midday movement session with adaptive options.',
+    wheelchairAccessible: true,
+    paymentRequired: true,
+    paymentAmount: 10,
   },
 ]
 
@@ -124,6 +150,38 @@ const registrations = [
   },
 ]
 
+// Sample users for testing (password is 'password123' for all)
+const users = [
+  {
+    id: 'user-participant-01',
+    email: 'participant@example.com',
+    password: 'password123',
+    name: 'Test Participant',
+    role: 'participant',
+    membership: 'Weekly',
+    preferences: ['Movement', 'Morning sessions'],
+    disabilities: '',
+    mobilityStatus: 'can walk',
+    onboardingComplete: true,
+  },
+  {
+    id: 'user-volunteer-01',
+    email: 'volunteer@example.com',
+    password: 'password123',
+    name: 'Test Volunteer',
+    role: 'volunteer',
+    onboardingComplete: true,
+  },
+  {
+    id: 'user-staff-01',
+    email: 'staff@example.com',
+    password: 'password123',
+    name: 'Test Staff',
+    role: 'staff',
+    onboardingComplete: true,
+  },
+]
+
 const seedDatabase = async () => {
   try {
     const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/hack4good'
@@ -141,6 +199,7 @@ const seedDatabase = async () => {
     console.log('Clearing existing data...')
     await Activity.deleteMany({})
     await Registration.deleteMany({})
+    await User.deleteMany({})
     console.log('✓ Cleared existing data')
 
     // Seed activities
@@ -152,6 +211,13 @@ const seedDatabase = async () => {
     console.log('Seeding registrations...')
     await Registration.insertMany(registrations)
     console.log(`✓ Seeded ${registrations.length} registrations`)
+
+    // Seed users (using create to trigger password hashing)
+    console.log('Seeding users...')
+    for (const userData of users) {
+      await User.create(userData)
+    }
+    console.log(`✓ Seeded ${users.length} users`)
 
     console.log('\n✓ Database seeded successfully!')
     

@@ -2,6 +2,7 @@
 
 import { ReactNode } from 'react'
 import { ToastProvider } from './ToastProvider'
+import { AuthProvider } from '../context/AuthContext'
 
 interface ClientProvidersProps {
   children: ReactNode
@@ -9,8 +10,10 @@ interface ClientProvidersProps {
 
 export function ClientProviders({ children }: ClientProvidersProps) {
   return (
-    <ToastProvider>
-      {children}
-    </ToastProvider>
+    <AuthProvider>
+      <ToastProvider>
+        {children}
+      </ToastProvider>
+    </AuthProvider>
   )
 }
