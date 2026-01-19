@@ -1,37 +1,16 @@
 'use client'
 
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { ActivityCardSkeleton } from '../../components/Skeleton'
+import CalendarGrid from '../../components/CalendarGrid'
+import ActivityModal from '../../components/ActivityModal'
+import { Activity } from '../../components/ActivityCard'
 
 const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
 
-type Activity = {
-  id: string
-  title: string
-  date: string
-  startTime: string
-  endTime: string
-  location: string
-  program: string
-  role: 'Participants' | 'Volunteers'
-  capacity: number
-  seatsLeft: number
-  cadence: string
-  description: string
-  wheelchairAccessible: boolean
-}
-
-const formatDate = (isoDate: string) => {
-  const date = new Date(`${isoDate}T00:00:00`)
-  return date.toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  })
-}
+const programOptions = ['All programs', 'Movement', 'Creative', 'Caregiver sessions']
 
 export default function VolunteerDashboard() {
   const router = useRouter()
@@ -41,7 +20,15 @@ export default function VolunteerDashboard() {
   const [commitmentIds, setCommitmentIds] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'opportunities' | 'commitments'>('opportunities')
+  
+  // Modal state
+  const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
+  const [registering, setRegistering] = useState(false)
+  
+  // Filters
+  const [searchTerm, setSearchTerm] = useState('')
+  const [programFilter, setProgramFilter] = useState('All programs')
+  const [accessibilityFilter, setAccessibilityFilter] = useState(false)
 
   // Redirect if not logged in or not a volunteer
   useEffect(() => {
@@ -62,7 +49,7 @@ export default function VolunteerDashboard() {
       setIsLoading(true)
       try {
         const [activitiesRes, registrationsRes] = await Promise.all([
-          fetch(`${apiBase}/api/activities?role=Volunteers`),
+          fetch(`${apiBase}/api/activities?role=Volunteer`),
           fetch(`${apiBase}/api/registrations`)
         ])
 
@@ -88,22 +75,104 @@ export default function VolunteerDashboard() {
     fetchData()
   }, [user])
 
+  // Filter activities
+  const filteredActivities = useMemo(() => {
+    const searchLower = searchTerm.toLowerCase().trim()
+    
+    return activities.filter((activity) => {
+      const matchesProgram = programFilter === 'All programs' || activity.program === programFilter
+      const matchesSearch = !searchLower || 
+        [activity.title, activity.location, activity.program]
+          .filter(Boolean)
+          .some((value) => value.toLowerCase().includes(searchLower))
+      const matchesAccessibility = !accessibilityFilter || activity.wheelchairAccessible
+      
+      return matchesProgram && matchesSearch && matchesAccessibility
+    })
+  }, [activities, programFilter, searchTerm, accessibilityFilter])
+
+  // Upcoming opportunities (next 7 days, not yet committed)
   const upcomingOpportunities = useMemo(() => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
+    const weekFromNow = new Date(today)
+    weekFromNow.setDate(weekFromNow.getDate() + 7)
+    
+    return filteredActivities
+      .filter(a => {
+        const actDate = new Date(`${a.date}T00:00:00`)
+        return actDate >= today && actDate <= weekFromNow
+      })
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .slice(0, 5)
+  }, [filteredActivities])
+
+  // My commitments
+  const myCommitments = useMemo(() => {
     return activities
-      .filter(a => new Date(`${a.date}T00:00:00`) >= today && !commitmentIds.includes(a.id))
+      .filter(a => commitmentIds.includes(a.id))
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
   }, [activities, commitmentIds])
 
-  const myCommitments = useMemo(() => {
-    return activities.filter(a => commitmentIds.includes(a.id))
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-  }, [activities, commitmentIds])
+  const handleActivityClick = (activity: Activity) => {
+    setSelectedActivity(activity)
+  }
+
+  const handleCommit = async (activity: Activity) => {
+    if (!user) return
+    
+    setRegistering(true)
+    try {
+      const response = await fetch(`${apiBase}/api/registrations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          activityId: activity.id,
+          name: user.name,
+          email: user.email,
+          role: 'Volunteer',
+        }),
+      })
+      
+      if (!response.ok) throw new Error('Commitment failed')
+      
+      setCommitmentIds(prev => [...prev, activity.id])
+      setSelectedActivity(null)
+    } catch (err) {
+      console.error('Commitment error:', err)
+    } finally {
+      setRegistering(false)
+    }
+  }
 
   const handleLogout = () => {
     logout()
     router.push('/')
+  }
+
+  const formatUpcomingDate = (isoDate: string) => {
+    const date = new Date(`${isoDate}T00:00:00`)
+    return {
+      day: date.getDate(),
+      month: date.toLocaleDateString('en-US', { month: 'short' }),
+    }
+  }
+
+  const formatTime = (time?: string) => {
+    const safe = time || '00:00'
+    const [hours, minutes] = safe.split(':')
+    const hour = parseInt(hours, 10)
+    const ampm = hour >= 12 ? 'PM' : 'AM'
+    const displayHour = hour % 12 || 12
+    return `${displayHour}:${minutes} ${ampm}`
+  }
+
+  const filtersActive = programFilter !== 'All programs' || searchTerm.trim() !== '' || accessibilityFilter
+
+  const resetFilters = () => {
+    setProgramFilter('All programs')
+    setSearchTerm('')
+    setAccessibilityFilter(false)
   }
 
   if (authLoading || !user) {
@@ -116,76 +185,31 @@ export default function VolunteerDashboard() {
 
   return (
     <main className="page">
-      <section className="container" style={{ padding: '32px 24px' }}>
+      <section className="container-wide" style={{ padding: '32px 24px' }}>
         {/* Header */}
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'flex-start',
-          flexWrap: 'wrap',
-          gap: '16px',
-          marginBottom: '32px'
-        }}>
+        <div className="dashboard-header">
           <div>
-            <h1 style={{ fontSize: '1.75rem', marginBottom: '8px' }}>
-              Volunteer Dashboard 🙌
-            </h1>
-            <p style={{ color: 'var(--muted)' }}>
-              Welcome, {user.name}
-            </p>
+            <h1 className="dashboard-title">Volunteer Dashboard 🙌</h1>
+            <p className="dashboard-subtitle">Welcome, {user.name}</p>
           </div>
-          <button
-            onClick={handleLogout}
-            className="button outline"
-            style={{ padding: '8px 16px', fontSize: '0.9rem' }}
-          >
+          <button onClick={handleLogout} className="button outline">
             Sign Out
           </button>
         </div>
 
         {/* Quick Stats */}
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '16px',
-          marginBottom: '32px'
-        }}>
-          <div style={{ 
-            background: 'var(--card)', 
-            padding: '20px', 
-            borderRadius: 'var(--radius-md)',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
-          }}>
-            <div style={{ color: 'var(--muted)', fontSize: '0.85rem', marginBottom: '4px' }}>
-              My Commitments
-            </div>
-            <div style={{ fontSize: '1.75rem', fontWeight: 700 }}>
-              {commitmentIds.length}
-            </div>
+        <div className="dashboard-stats">
+          <div className="stat-box">
+            <div className="stat-box-label">My Commitments</div>
+            <div className="stat-box-value">{commitmentIds.length}</div>
           </div>
-          <div style={{ 
-            background: 'var(--card)', 
-            padding: '20px', 
-            borderRadius: 'var(--radius-md)',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
-          }}>
-            <div style={{ color: 'var(--muted)', fontSize: '0.85rem', marginBottom: '4px' }}>
-              Open Opportunities
-            </div>
-            <div style={{ fontSize: '1.75rem', fontWeight: 700 }}>
-              {upcomingOpportunities.length}
-            </div>
+          <div className="stat-box">
+            <div className="stat-box-label">Open Opportunities</div>
+            <div className="stat-box-value">{upcomingOpportunities.filter(a => !commitmentIds.includes(a.id)).length}</div>
           </div>
-          <div style={{ 
-            background: 'var(--card)', 
-            padding: '20px', 
-            borderRadius: 'var(--radius-md)',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
-          }}>
-            <div style={{ color: 'var(--muted)', fontSize: '0.85rem', marginBottom: '4px' }}>
-              This Week
-            </div>
-            <div style={{ fontSize: '1.75rem', fontWeight: 700 }}>
+          <div className="stat-box">
+            <div className="stat-box-label">This Week</div>
+            <div className="stat-box-value">
               {myCommitments.filter(a => {
                 const actDate = new Date(`${a.date}T00:00:00`)
                 const weekFromNow = new Date()
@@ -194,142 +218,167 @@ export default function VolunteerDashboard() {
               }).length}
             </div>
           </div>
+          <div className="stat-box">
+            <div className="stat-box-label">Total Opportunities</div>
+            <div className="stat-box-value">{activities.length}</div>
+          </div>
         </div>
 
-        {/* Tabs */}
-        <div style={{ 
-          display: 'flex', 
-          gap: '8px', 
-          marginBottom: '24px',
-          borderBottom: '1px solid var(--line)',
-          paddingBottom: '16px'
-        }}>
-          <button
-            onClick={() => setActiveTab('opportunities')}
-            style={{
-              padding: '8px 16px',
-              background: activeTab === 'opportunities' ? 'var(--accent)' : 'transparent',
-              color: activeTab === 'opportunities' ? 'white' : 'var(--ink)',
-              border: 'none',
-              borderRadius: 'var(--radius-sm)',
-              cursor: 'pointer',
-              fontWeight: 500
-            }}
-          >
-            Volunteer Opportunities
-          </button>
-          <button
-            onClick={() => setActiveTab('commitments')}
-            style={{
-              padding: '8px 16px',
-              background: activeTab === 'commitments' ? 'var(--accent)' : 'transparent',
-              color: activeTab === 'commitments' ? 'white' : 'var(--ink)',
-              border: 'none',
-              borderRadius: 'var(--radius-sm)',
-              cursor: 'pointer',
-              fontWeight: 500
-            }}
-          >
-            My Commitments ({commitmentIds.length})
-          </button>
-          <Link
-            href="/calendar"
-            className="button outline"
-            style={{ marginLeft: 'auto', padding: '8px 16px', fontSize: '0.9rem' }}
-          >
-            View Full Calendar
-          </Link>
-        </div>
-
-        {/* Content */}
-        {isLoading ? (
-          <div style={{ display: 'grid', gap: '16px', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
-            {[1, 2, 3].map(i => <ActivityCardSkeleton key={i} />)}
-          </div>
-        ) : error ? (
-          <div style={{ 
-            background: 'var(--toast-error-bg)', 
-            padding: '16px', 
-            borderRadius: 'var(--radius-sm)',
-            color: 'var(--toast-error-text)'
-          }}>
-            {error}
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gap: '16px', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
-            {(activeTab === 'opportunities' ? upcomingOpportunities : myCommitments).map(activity => (
-              <Link
-                key={activity.id}
-                href={`/activity/${activity.id}`}
-                style={{
-                  background: 'var(--card)',
-                  padding: '20px',
-                  borderRadius: 'var(--radius-md)',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
-                  textDecoration: 'none',
-                  color: 'inherit',
-                  transition: 'transform 0.2s ease, box-shadow 0.2s ease'
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                  <span style={{ 
-                    padding: '4px 8px', 
-                    background: 'var(--accent-soft)', 
-                    borderRadius: '4px',
-                    fontSize: '0.75rem',
-                    fontWeight: 600
-                  }}>
-                    {activity.program}
-                  </span>
-                  {commitmentIds.includes(activity.id) && (
-                    <span style={{ 
-                      padding: '4px 8px', 
-                      background: 'var(--sage)', 
-                      color: 'white',
-                      borderRadius: '4px',
-                      fontSize: '0.75rem'
-                    }}>
-                      Committed
-                    </span>
-                  )}
-                </div>
-                <h3 style={{ fontSize: '1.1rem', marginBottom: '8px' }}>{activity.title}</h3>
-                <p style={{ color: 'var(--muted)', fontSize: '0.9rem', marginBottom: '8px' }}>
-                  {formatDate(activity.date)} • {activity.startTime} - {activity.endTime}
-                </p>
-                <p style={{ color: 'var(--muted)', fontSize: '0.85rem', marginBottom: '12px' }}>
-                  📍 {activity.location}
-                </p>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ 
-                    padding: '4px 8px', 
-                    background: 'var(--line)', 
-                    borderRadius: '4px',
-                    fontSize: '0.75rem'
-                  }}>
-                    {activity.cadence}
-                  </span>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
-                    {activity.seatsLeft} spots left
-                  </span>
-                </div>
-              </Link>
-            ))}
-            {(activeTab === 'opportunities' ? upcomingOpportunities : myCommitments).length === 0 && (
-              <div style={{ 
-                gridColumn: '1 / -1',
-                textAlign: 'center', 
-                padding: '48px', 
-                color: 'var(--muted)' 
-              }}>
-                {activeTab === 'opportunities' 
-                  ? 'No volunteer opportunities available right now.' 
-                  : "You haven't signed up for any volunteer shifts yet."}
-              </div>
-            )}
+        {/* My Commitments */}
+        {myCommitments.length > 0 && (
+          <div className="dashboard-section">
+            <div className="dashboard-section-header">
+              <h2 className="dashboard-section-title">✅ My Commitments</h2>
+              <span style={{ color: 'var(--muted)', fontSize: '0.9rem' }}>
+                {myCommitments.length} shifts
+              </span>
+            </div>
+            
+            <div className="upcoming-list">
+              {myCommitments.slice(0, 3).map(activity => {
+                const dateInfo = formatUpcomingDate(activity.date)
+                
+                return (
+                  <button
+                    key={activity.id}
+                    className="upcoming-item"
+                    onClick={() => handleActivityClick(activity)}
+                  >
+                    <div className="upcoming-date">
+                      <div className="upcoming-date-day">{dateInfo.day}</div>
+                      <div className="upcoming-date-month">{dateInfo.month}</div>
+                    </div>
+                    <div className="upcoming-info">
+                      <div className="upcoming-title">{activity.title}</div>
+                      <div className="upcoming-meta">
+                        {formatTime(activity.startTime)} - {formatTime(activity.endTime)} • {activity.location}
+                      </div>
+                    </div>
+                    <div className="upcoming-tags">
+                      <span className="upcoming-tag">{activity.program}</span>
+                      <span className="upcoming-tag registered">✓ Committed</span>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
           </div>
         )}
+
+        {/* Upcoming Opportunities */}
+        <div className="dashboard-section">
+          <div className="dashboard-section-header">
+            <h2 className="dashboard-section-title">📅 Upcoming Opportunities</h2>
+            <span style={{ color: 'var(--muted)', fontSize: '0.9rem' }}>
+              {upcomingOpportunities.length} this week
+            </span>
+          </div>
+          
+          {isLoading ? (
+            <div style={{ display: 'grid', gap: '12px' }}>
+              {[1, 2, 3].map(i => <ActivityCardSkeleton key={i} />)}
+            </div>
+          ) : error ? (
+            <div style={{ background: 'var(--toast-error-bg)', padding: '16px', borderRadius: 'var(--radius-sm)', color: 'var(--toast-error-text)' }}>
+              {error}
+            </div>
+          ) : upcomingOpportunities.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}>
+              No upcoming opportunities this week matching your filters.
+            </div>
+          ) : (
+            <div className="upcoming-list">
+              {upcomingOpportunities.map(activity => {
+                const dateInfo = formatUpcomingDate(activity.date)
+                const isCommitted = commitmentIds.includes(activity.id)
+                
+                return (
+                  <button
+                    key={activity.id}
+                    className="upcoming-item"
+                    onClick={() => handleActivityClick(activity)}
+                  >
+                    <div className="upcoming-date">
+                      <div className="upcoming-date-day">{dateInfo.day}</div>
+                      <div className="upcoming-date-month">{dateInfo.month}</div>
+                    </div>
+                    <div className="upcoming-info">
+                      <div className="upcoming-title">{activity.title}</div>
+                      <div className="upcoming-meta">
+                        {formatTime(activity.startTime)} - {formatTime(activity.endTime)} • {activity.location}
+                      </div>
+                    </div>
+                    <div className="upcoming-tags">
+                      <span className="upcoming-tag">{activity.program}</span>
+                      {isCommitted && <span className="upcoming-tag registered">✓ Committed</span>}
+                      {activity.wheelchairAccessible && <span className="upcoming-tag">♿</span>}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Filters & Calendar */}
+        <div className="dashboard-section">
+          <div className="dashboard-section-header">
+            <h2 className="dashboard-section-title">🗓️ Volunteer Calendar</h2>
+            {filtersActive && (
+              <button className="button ghost" onClick={resetFilters}>
+                Reset filters
+              </button>
+            )}
+          </div>
+          
+          <div className="filter-row">
+            <input
+              type="search"
+              className="input"
+              placeholder="Search opportunities..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          
+          <div className="filter-chips" style={{ marginBottom: '20px' }}>
+            {programOptions.map(option => (
+              <button
+                key={option}
+                type="button"
+                className={`chip ${programFilter === option ? 'active' : ''}`}
+                onClick={() => setProgramFilter(option)}
+              >
+                {option}
+              </button>
+            ))}
+            <button
+              type="button"
+              className={`chip ${accessibilityFilter ? 'active' : ''}`}
+              onClick={() => setAccessibilityFilter(!accessibilityFilter)}
+            >
+              ♿ Accessible venues
+            </button>
+          </div>
+
+          {!isLoading && !error && (
+            <CalendarGrid
+              activities={activities}
+              filteredActivities={filteredActivities}
+              onActivityClick={handleActivityClick}
+            />
+          )}
+        </div>
       </section>
+
+      {/* Activity Modal */}
+      <ActivityModal
+        activity={selectedActivity}
+        onClose={() => setSelectedActivity(null)}
+        onRegister={handleCommit}
+        isRegistered={selectedActivity ? commitmentIds.includes(selectedActivity.id) : false}
+        registering={registering}
+      />
     </main>
   )
 }

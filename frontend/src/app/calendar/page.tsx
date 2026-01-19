@@ -7,7 +7,7 @@ import ActivityCard, { Activity } from '../components/ActivityCard'
 
 const programOptions = ['All programs', 'Movement', 'Creative', 'Caregiver sessions']
 const roleOptions = ['All roles', 'Participant', 'Volunteer']
-const cadenceOptions = ['All cadences', 'Weekly', 'Fortnightly', 'Monthly', 'One-off']
+const typeOptions = ['All types', 'Weekly', 'Fortnightly', 'Monthly', 'One-off']
 const dateRangeOptions = ['All dates', 'Next 7 days', 'Next 30 days']
 
 type ViewMode = 'Calendar' | 'List'
@@ -21,7 +21,7 @@ export default function CalendarPage() {
   // Filters
   const [programFilter, setProgramFilter] = useState('All programs')
   const [roleFilter, setRoleFilter] = useState('All roles')
-  const [cadenceFilter, setCadenceFilter] = useState('All cadences')
+  const [typeFilter, setTypeFilter] = useState('All types')
   const [dateRange, setDateRange] = useState('All dates')
   const [searchTerm, setSearchTerm] = useState('')
   const [accessibilityFilter, setAccessibilityFilter] = useState(false)
@@ -46,7 +46,7 @@ export default function CalendarPage() {
   const filtersActive =
     programFilter !== 'All programs' ||
     roleFilter !== 'All roles' ||
-    cadenceFilter !== 'All cadences' ||
+    typeFilter !== 'All types' ||
     dateRange !== 'All dates' ||
     searchTerm.trim() !== '' ||
     accessibilityFilter ||
@@ -55,7 +55,7 @@ export default function CalendarPage() {
   const resetFilters = () => {
     setProgramFilter('All programs')
     setRoleFilter('All roles')
-    setCadenceFilter('All cadences')
+    setTypeFilter('All types')
     setDateRange('All dates')
     setSearchTerm('')
     setAccessibilityFilter(false)
@@ -64,8 +64,13 @@ export default function CalendarPage() {
 
   const summaryStats = useMemo(() => {
     const total = activities.length
-    const participantSessions = activities.filter(a => a.role === 'Participant').length
-    const volunteerSessions = activities.filter(a => a.role === 'Volunteer').length
+    // Support both old role field and new roles array
+    const participantSessions = activities.filter(a => 
+      a.roles?.includes('Participant') || a.role === 'Participant'
+    ).length
+    const volunteerSessions = activities.filter(a => 
+      a.roles?.includes('Volunteer') || a.roles?.includes('Volunteers Only') || a.role === 'Volunteer'
+    ).length
     const uniqueDays = new Set(activities.map(a => a.date)).size
     return { total, participantSessions, volunteerSessions, uniqueDays }
   }, [activities])
@@ -80,9 +85,13 @@ export default function CalendarPage() {
     return activities.filter((activity) => {
       const matchesProgram =
         programFilter === 'All programs' || activity.program === programFilter
-      const matchesRole = roleFilter === 'All roles' || activity.role === roleFilter
-      const matchesCadence =
-        cadenceFilter === 'All cadences' || activity.cadence === cadenceFilter
+      // Support both old role field and new roles array
+      const activityRoles = activity.roles || (activity.role ? [activity.role] : [])
+      const matchesRole = roleFilter === 'All roles' || activityRoles.includes(roleFilter)
+      // Support both old cadence field and new type field
+      const activityType = activity.type || activity.cadence || ''
+      const matchesType =
+        typeFilter === 'All types' || activityType === typeFilter
       const matchesDate =
         rangeDays === null
           ? true
@@ -94,7 +103,7 @@ export default function CalendarPage() {
             })()
       const matchesSearch =
         !searchLower ||
-        [activity.title, activity.location, activity.program, activity.cadence]
+        [activity.title, activity.location, activity.program, activityType]
           .filter(Boolean)
           .some((value) => value.toLowerCase().includes(searchLower))
       const matchesAccessibility =
@@ -105,7 +114,7 @@ export default function CalendarPage() {
       return (
         matchesProgram &&
         matchesRole &&
-        matchesCadence &&
+        matchesType &&
         matchesSearch &&
         matchesDate &&
         matchesAccessibility &&
@@ -114,7 +123,7 @@ export default function CalendarPage() {
     })
   }, [
     activities,
-    cadenceFilter,
+    typeFilter,
     dateRange,
     programFilter,
     roleFilter,
@@ -125,14 +134,21 @@ export default function CalendarPage() {
 
   const openSeats = useMemo(() => {
     return filteredActivities.reduce(
-      (total, activity) => total + Math.max(activity.seatsLeft, 0),
+      (total, activity) => {
+        // Support both old seatsLeft and new participantSeatsLeft/volunteerSeatsLeft
+        const seats = activity.participantSeatsLeft ?? activity.volunteerSeatsLeft ?? activity.seatsLeft ?? 0
+        return total + Math.max(seats, 0)
+      },
       0
     )
   }, [filteredActivities])
 
   const lowCapacityCount = useMemo(() => {
     return filteredActivities.filter(
-      (activity) => activity.seatsLeft > 0 && activity.seatsLeft <= 2
+      (activity) => {
+        const seats = activity.participantSeatsLeft ?? activity.volunteerSeatsLeft ?? activity.seatsLeft ?? 0
+        return seats > 0 && seats <= 2
+      }
     ).length
   }, [filteredActivities])
 
@@ -236,7 +252,7 @@ export default function CalendarPage() {
           <span className="badge">Calendar view</span>
           <h1>Unified activity schedule</h1>
           <p>
-            Filter by program, role, or cadence to see the sessions that matter
+            Filter by program, role, or type to see the sessions that matter
             most.
           </p>
         </div>
@@ -419,13 +435,13 @@ export default function CalendarPage() {
             ))}
           </div>
           <div className="filters">
-            <span className="filter-label">Cadence</span>
-            {cadenceOptions.map((option) => (
+            <span className="filter-label">Type</span>
+            {typeOptions.map((option) => (
               <button
                 key={option}
                 type="button"
-                className={`chip ${cadenceFilter === option ? 'active' : ''}`}
-                onClick={() => setCadenceFilter(option)}
+                className={`chip ${typeFilter === option ? 'active' : ''}`}
+                onClick={() => setTypeFilter(option)}
               >
                 {option}
               </button>
@@ -458,7 +474,7 @@ export default function CalendarPage() {
         ) : filteredActivities.length === 0 ? (
           <div className="empty-state">
             <strong>No activities match those filters</strong>
-            <span>Try switching date range, program, role, or cadence.</span>
+            <span>Try switching date range, program, role, or type.</span>
             {filtersActive && (
               <button className="button" type="button" onClick={resetFilters}>
                 Reset filters

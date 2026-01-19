@@ -7,6 +7,7 @@ import ActivityCard, { Activity } from './ActivityCard'
 interface CalendarGridProps {
   activities: Activity[]
   filteredActivities: Activity[]
+  onActivityClick?: (activity: Activity) => void
 }
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -15,7 +16,7 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ]
 
-export default function CalendarGrid({ activities, filteredActivities }: CalendarGridProps) {
+export default function CalendarGrid({ activities, filteredActivities, onActivityClick }: CalendarGridProps) {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
 
@@ -76,7 +77,11 @@ export default function CalendarGrid({ activities, filteredActivities }: Calenda
   }
 
   const formatDateKey = (date: Date) => {
-    return date.toISOString().split('T')[0]
+    // Use local date components to avoid timezone issues
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
   }
 
   const goToPreviousMonth = () => {
@@ -158,6 +163,7 @@ export default function CalendarGrid({ activities, filteredActivities }: Calenda
               isCurrentMonth={isCurrentMonth(date)}
               isToday={isToday(date)}
               onDayClick={handleDayClick}
+              onActivityClick={onActivityClick}
             />
           )
         })}
@@ -185,6 +191,7 @@ export default function CalendarGrid({ activities, filteredActivities }: Calenda
                   key={activity.id}
                   activity={activity}
                   isFiltered={!filteredActivityIds.has(activity.id)}
+                  onClick={onActivityClick}
                 />
               ))}
             </div>

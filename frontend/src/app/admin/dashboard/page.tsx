@@ -16,11 +16,19 @@ type Activity = {
   endTime: string
   location: string
   program: string
-  role: 'Participants' | 'Volunteers'
-  capacity: number
-  seatsLeft: number
-  cadence: string
+  roles?: string[]
+  role?: 'Participants' | 'Volunteers'
+  participantCapacity?: number
+  volunteerCapacity?: number
+  participantSeatsLeft?: number
+  volunteerSeatsLeft?: number
+  capacity?: number
+  seatsLeft?: number
+  type?: string
+  cadence?: string
   description: string
+  imageUrl?: string
+  featured?: boolean
 }
 
 type Registration = {
@@ -49,6 +57,7 @@ export default function AdminDashboard() {
   const [registrations, setRegistrations] = useState<Registration[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [featuringId, setFeaturingId] = useState<string | null>(null)
 
   // Redirect if not logged in or not staff
   useEffect(() => {
@@ -92,16 +101,28 @@ export default function AdminDashboard() {
     fetchData()
   }, [user])
 
+  const getCapacity = (a: Activity) => {
+    return (a.participantCapacity ?? 0) + (a.volunteerCapacity ?? 0) || a.capacity || 0
+  }
+  
+  const getSeatsLeft = (a: Activity) => {
+    return (a.participantSeatsLeft ?? 0) + (a.volunteerSeatsLeft ?? 0) || a.seatsLeft || 0
+  }
+
   const stats = useMemo(() => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     
     const upcoming = activities.filter(a => new Date(`${a.date}T00:00:00`) >= today)
-    const participantActivities = activities.filter(a => a.role === 'Participants')
-    const volunteerActivities = activities.filter(a => a.role === 'Volunteers')
+    const participantActivities = activities.filter(a => 
+      a.roles?.includes('Participants') || a.role === 'Participants'
+    )
+    const volunteerActivities = activities.filter(a => 
+      a.roles?.includes('Volunteers') || a.role === 'Volunteers'
+    )
     const totalRegistrations = registrations.length
-    const totalCapacity = activities.reduce((sum, a) => sum + a.capacity, 0)
-    const totalBooked = activities.reduce((sum, a) => sum + (a.capacity - a.seatsLeft), 0)
+    const totalCapacity = activities.reduce((sum, a) => sum + getCapacity(a), 0)
+    const totalBooked = activities.reduce((sum, a) => sum + (getCapacity(a) - getSeatsLeft(a)), 0)
 
     return {
       total: activities.length,
@@ -112,6 +133,34 @@ export default function AdminDashboard() {
       occupancyRate: totalCapacity > 0 ? Math.round((totalBooked / totalCapacity) * 100) : 0
     }
   }, [activities, registrations])
+
+  const handleFeature = async (activityId: string, currentlyFeatured: boolean) => {
+    setFeaturingId(activityId)
+    try {
+      if (currentlyFeatured) {
+        // Unfeature the activity
+        await fetch(`${apiBase}/api/activities/${activityId}/feature`, {
+          method: 'DELETE',
+        })
+        setActivities(prev => prev.map(a => 
+          a.id === activityId ? { ...a, featured: false } : a
+        ))
+      } else {
+        // Feature the activity (will unfeature others)
+        await fetch(`${apiBase}/api/activities/${activityId}/feature`, {
+          method: 'POST',
+        })
+        setActivities(prev => prev.map(a => ({
+          ...a,
+          featured: a.id === activityId
+        })))
+      }
+    } catch (err) {
+      console.error('Failed to update featured status:', err)
+    } finally {
+      setFeaturingId(null)
+    }
+  }
 
   const handleLogout = () => {
     logout()
@@ -148,11 +197,11 @@ export default function AdminDashboard() {
           </div>
           <div style={{ display: 'flex', gap: '12px' }}>
             <Link
-              href="/admin"
+              href="/admin/calendar"
               className="button primary"
               style={{ padding: '8px 16px', fontSize: '0.9rem' }}
             >
-              Manage Activities
+              Manage Activities Calendar
             </Link>
             <button
               onClick={handleLogout}
@@ -225,51 +274,6 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Quick Links */}
-        <h2 style={{ fontSize: '1.25rem', marginBottom: '16px' }}>Quick Actions</h2>
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-          gap: '16px',
-          marginBottom: '32px'
-        }}>
-          <Link
-            href="/admin"
-            style={{
-              background: 'var(--card)',
-              padding: '24px',
-              borderRadius: 'var(--radius-md)',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
-              textDecoration: 'none',
-              color: 'inherit',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '8px'
-            }}
-          >
-            <span style={{ fontSize: '1.5rem' }}>📋</span>
-            <span style={{ fontWeight: 600 }}>Activity Management</span>
-            <span style={{ color: 'var(--muted)', fontSize: '0.9rem' }}>Create, edit, and delete activities</span>
-          </Link>
-          <Link
-            href="/calendar"
-            style={{
-              background: 'var(--card)',
-              padding: '24px',
-              borderRadius: 'var(--radius-md)',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
-              textDecoration: 'none',
-              color: 'inherit',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '8px'
-            }}
-          >
-            <span style={{ fontSize: '1.5rem' }}>📅</span>
-            <span style={{ fontWeight: 600 }}>View Calendar</span>
-            <span style={{ color: 'var(--muted)', fontSize: '0.9rem' }}>See all scheduled activities</span>
-          </Link>
-        </div>
 
         {/* Recent Activities */}
         <h2 style={{ fontSize: '1.25rem', marginBottom: '16px' }}>Recent Activities</h2>
@@ -301,12 +305,12 @@ export default function AdminDashboard() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                   <span style={{ 
                     padding: '4px 8px', 
-                    background: activity.role === 'Participants' ? 'var(--accent-soft)' : 'var(--line)', 
+                    background: (activity.roles?.includes('Participants') || activity.role === 'Participants') ? 'var(--accent-soft)' : 'var(--line)', 
                     borderRadius: '4px',
                     fontSize: '0.75rem',
                     fontWeight: 600
                   }}>
-                    {activity.role}
+                    {activity.roles?.join(', ') || activity.role}
                   </span>
                   <span style={{ 
                     padding: '4px 8px', 
@@ -315,16 +319,32 @@ export default function AdminDashboard() {
                     borderRadius: '4px',
                     fontSize: '0.75rem'
                   }}>
-                    {activity.capacity - activity.seatsLeft}/{activity.capacity}
+                    {getCapacity(activity) - getSeatsLeft(activity)}/{getCapacity(activity)}
                   </span>
                 </div>
                 <h3 style={{ fontSize: '1.1rem', marginBottom: '8px' }}>{activity.title}</h3>
                 <p style={{ color: 'var(--muted)', fontSize: '0.9rem', marginBottom: '8px' }}>
                   {formatDate(activity.date)} • {activity.startTime} - {activity.endTime}
                 </p>
-                <p style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>
+                <p style={{ color: 'var(--muted)', fontSize: '0.85rem', marginBottom: '12px' }}>
                   📍 {activity.location}
                 </p>
+                <button
+                  onClick={() => handleFeature(activity.id, activity.featured || false)}
+                  disabled={featuringId === activity.id}
+                  style={{
+                    padding: '6px 12px',
+                    fontSize: '0.8rem',
+                    borderRadius: '6px',
+                    border: activity.featured ? '1px solid var(--accent)' : '1px solid var(--line)',
+                    background: activity.featured ? 'var(--accent)' : 'transparent',
+                    color: activity.featured ? 'white' : 'var(--muted)',
+                    cursor: featuringId === activity.id ? 'wait' : 'pointer',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  {featuringId === activity.id ? '...' : activity.featured ? '⭐ Featured' : '☆ Feature'}
+                </button>
               </div>
             ))}
           </div>

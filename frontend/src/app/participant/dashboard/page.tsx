@@ -1,39 +1,16 @@
 'use client'
 
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { ActivityCardSkeleton } from '../../components/Skeleton'
+import CalendarGrid from '../../components/CalendarGrid'
+import ActivityModal from '../../components/ActivityModal'
+import { Activity } from '../../components/ActivityCard'
 
 const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
 
-type Activity = {
-  id: string
-  title: string
-  date: string
-  startTime: string
-  endTime: string
-  location: string
-  program: string
-  role: 'Participants' | 'Volunteers'
-  capacity: number
-  seatsLeft: number
-  cadence: string
-  description: string
-  wheelchairAccessible: boolean
-  paymentRequired: boolean
-  paymentAmount?: number
-}
-
-const formatDate = (isoDate: string) => {
-  const date = new Date(`${isoDate}T00:00:00`)
-  return date.toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  })
-}
+const programOptions = ['All programs', 'Movement', 'Creative', 'Caregiver sessions']
 
 export default function ParticipantDashboard() {
   const router = useRouter()
@@ -43,7 +20,16 @@ export default function ParticipantDashboard() {
   const [registeredIds, setRegisteredIds] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'upcoming' | 'registered'>('upcoming')
+  
+  // Modal state
+  const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
+  const [registering, setRegistering] = useState(false)
+  
+  // Filters
+  const [searchTerm, setSearchTerm] = useState('')
+  const [programFilter, setProgramFilter] = useState('All programs')
+  const [accessibilityFilter, setAccessibilityFilter] = useState(false)
+  const [freeOnlyFilter, setFreeOnlyFilter] = useState(false)
 
   // Redirect if not logged in or not a participant
   useEffect(() => {
@@ -66,7 +52,7 @@ export default function ParticipantDashboard() {
       setIsLoading(true)
       try {
         const [activitiesRes, registrationsRes] = await Promise.all([
-          fetch(`${apiBase}/api/activities?role=Participants`),
+          fetch(`${apiBase}/api/activities?role=Participant`),
           fetch(`${apiBase}/api/registrations`)
         ])
 
@@ -92,21 +78,99 @@ export default function ParticipantDashboard() {
     fetchData()
   }, [user])
 
+  // Filter activities
+  const filteredActivities = useMemo(() => {
+    const searchLower = searchTerm.toLowerCase().trim()
+    
+    return activities.filter((activity) => {
+      const matchesProgram = programFilter === 'All programs' || activity.program === programFilter
+      const matchesSearch = !searchLower || 
+        [activity.title, activity.location, activity.program]
+          .filter(Boolean)
+          .some((value) => value.toLowerCase().includes(searchLower))
+      const matchesAccessibility = !accessibilityFilter || activity.wheelchairAccessible
+      const matchesFree = !freeOnlyFilter || !activity.paymentRequired
+      
+      return matchesProgram && matchesSearch && matchesAccessibility && matchesFree
+    })
+  }, [activities, programFilter, searchTerm, accessibilityFilter, freeOnlyFilter])
+
+  // Upcoming activities (next 7 days)
   const upcomingActivities = useMemo(() => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-    return activities
-      .filter(a => new Date(`${a.date}T00:00:00`) >= today)
+    const weekFromNow = new Date(today)
+    weekFromNow.setDate(weekFromNow.getDate() + 7)
+    
+    return filteredActivities
+      .filter(a => {
+        const actDate = new Date(`${a.date}T00:00:00`)
+        return actDate >= today && actDate <= weekFromNow
+      })
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-  }, [activities])
+      .slice(0, 5)
+  }, [filteredActivities])
 
-  const registeredActivities = useMemo(() => {
-    return activities.filter(a => registeredIds.includes(a.id))
-  }, [activities, registeredIds])
+  const handleActivityClick = (activity: Activity) => {
+    setSelectedActivity(activity)
+  }
+
+  const handleRegister = async (activity: Activity) => {
+    if (!user) return
+    
+    setRegistering(true)
+    try {
+      const response = await fetch(`${apiBase}/api/registrations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          activityId: activity.id,
+          name: user.name,
+          email: user.email,
+          role: 'Participant',
+        }),
+      })
+      
+      if (!response.ok) throw new Error('Registration failed')
+      
+      setRegisteredIds(prev => [...prev, activity.id])
+      setSelectedActivity(null)
+    } catch (err) {
+      console.error('Registration error:', err)
+    } finally {
+      setRegistering(false)
+    }
+  }
 
   const handleLogout = () => {
     logout()
     router.push('/')
+  }
+
+  const formatUpcomingDate = (isoDate: string) => {
+    const date = new Date(`${isoDate}T00:00:00`)
+    return {
+      day: date.getDate(),
+      month: date.toLocaleDateString('en-US', { month: 'short' }),
+    }
+  }
+
+  const formatTime = (time?: string) => {
+    const safe = time || '00:00'
+    const [hours, minutes] = safe.split(':')
+    const hour = parseInt(hours, 10)
+    const ampm = hour >= 12 ? 'PM' : 'AM'
+    const displayHour = hour % 12 || 12
+    return `${displayHour}:${minutes} ${ampm}`
+  }
+
+  const filtersActive = programFilter !== 'All programs' || searchTerm.trim() !== '' || accessibilityFilter || freeOnlyFilter
+
+  const resetFilters = () => {
+    setProgramFilter('All programs')
+    setSearchTerm('')
+    setAccessibilityFilter(false)
+    setFreeOnlyFilter(false)
   }
 
   if (authLoading || !user) {
@@ -119,220 +183,163 @@ export default function ParticipantDashboard() {
 
   return (
     <main className="page">
-      <section className="container" style={{ padding: '32px 24px' }}>
+      <section className="container-wide" style={{ padding: '32px 24px' }}>
         {/* Header */}
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'flex-start',
-          flexWrap: 'wrap',
-          gap: '16px',
-          marginBottom: '32px'
-        }}>
+        <div className="dashboard-header">
           <div>
-            <h1 style={{ fontSize: '1.75rem', marginBottom: '8px' }}>
-              Welcome back, {user.name}! 👋
-            </h1>
-            <p style={{ color: 'var(--muted)' }}>
+            <h1 className="dashboard-title">Welcome back, {user.name}! 👋</h1>
+            <p className="dashboard-subtitle">
               {user.membership} member • {user.mobilityStatus}
             </p>
           </div>
-          <button
-            onClick={handleLogout}
-            className="button outline"
-            style={{ padding: '8px 16px', fontSize: '0.9rem' }}
-          >
+          <button onClick={handleLogout} className="button outline">
             Sign Out
           </button>
         </div>
 
         {/* Quick Stats */}
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '16px',
-          marginBottom: '32px'
-        }}>
-          <div style={{ 
-            background: 'var(--card)', 
-            padding: '20px', 
-            borderRadius: 'var(--radius-md)',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
-          }}>
-            <div style={{ color: 'var(--muted)', fontSize: '0.85rem', marginBottom: '4px' }}>
-              Registered Activities
-            </div>
-            <div style={{ fontSize: '1.75rem', fontWeight: 700 }}>
-              {registeredIds.length}
-            </div>
+        <div className="dashboard-stats">
+          <div className="stat-box">
+            <div className="stat-box-label">Registered Activities</div>
+            <div className="stat-box-value">{registeredIds.length}</div>
           </div>
-          <div style={{ 
-            background: 'var(--card)', 
-            padding: '20px', 
-            borderRadius: 'var(--radius-md)',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
-          }}>
-            <div style={{ color: 'var(--muted)', fontSize: '0.85rem', marginBottom: '4px' }}>
-              Upcoming This Week
-            </div>
-            <div style={{ fontSize: '1.75rem', fontWeight: 700 }}>
-              {upcomingActivities.filter(a => {
-                const actDate = new Date(`${a.date}T00:00:00`)
-                const weekFromNow = new Date()
-                weekFromNow.setDate(weekFromNow.getDate() + 7)
-                return actDate <= weekFromNow
-              }).length}
-            </div>
+          <div className="stat-box">
+            <div className="stat-box-label">Available This Week</div>
+            <div className="stat-box-value">{upcomingActivities.length}</div>
           </div>
-          <div style={{ 
-            background: 'var(--card)', 
-            padding: '20px', 
-            borderRadius: 'var(--radius-md)',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
-          }}>
-            <div style={{ color: 'var(--muted)', fontSize: '0.85rem', marginBottom: '4px' }}>
-              Your Preferences
-            </div>
+          <div className="stat-box">
+            <div className="stat-box-label">Total Activities</div>
+            <div className="stat-box-value">{activities.length}</div>
+          </div>
+          <div className="stat-box">
+            <div className="stat-box-label">Your Preferences</div>
             <div style={{ fontSize: '0.9rem' }}>
               {user.preferences?.length ? user.preferences.join(', ') : 'None set'}
             </div>
           </div>
         </div>
 
-        {/* Tabs */}
-        <div style={{ 
-          display: 'flex', 
-          gap: '8px', 
-          marginBottom: '24px',
-          borderBottom: '1px solid var(--line)',
-          paddingBottom: '16px'
-        }}>
-          <button
-            onClick={() => setActiveTab('upcoming')}
-            style={{
-              padding: '8px 16px',
-              background: activeTab === 'upcoming' ? 'var(--accent)' : 'transparent',
-              color: activeTab === 'upcoming' ? 'white' : 'var(--ink)',
-              border: 'none',
-              borderRadius: 'var(--radius-sm)',
-              cursor: 'pointer',
-              fontWeight: 500
-            }}
-          >
-            Upcoming Activities
-          </button>
-          <button
-            onClick={() => setActiveTab('registered')}
-            style={{
-              padding: '8px 16px',
-              background: activeTab === 'registered' ? 'var(--accent)' : 'transparent',
-              color: activeTab === 'registered' ? 'white' : 'var(--ink)',
-              border: 'none',
-              borderRadius: 'var(--radius-sm)',
-              cursor: 'pointer',
-              fontWeight: 500
-            }}
-          >
-            My Registrations ({registeredIds.length})
-          </button>
-          <Link
-            href="/calendar"
-            className="button outline"
-            style={{ marginLeft: 'auto', padding: '8px 16px', fontSize: '0.9rem' }}
-          >
-            View Full Calendar
-          </Link>
+        {/* Upcoming Activities */}
+        <div className="dashboard-section">
+          <div className="dashboard-section-header">
+            <h2 className="dashboard-section-title">📅 Upcoming This Week</h2>
+            <span style={{ color: 'var(--muted)', fontSize: '0.9rem' }}>
+              {upcomingActivities.length} activities
+            </span>
+          </div>
+          
+          {isLoading ? (
+            <div style={{ display: 'grid', gap: '12px' }}>
+              {[1, 2, 3].map(i => <ActivityCardSkeleton key={i} />)}
+            </div>
+          ) : error ? (
+            <div style={{ background: 'var(--toast-error-bg)', padding: '16px', borderRadius: 'var(--radius-sm)', color: 'var(--toast-error-text)' }}>
+              {error}
+            </div>
+          ) : upcomingActivities.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}>
+              No upcoming activities this week matching your filters.
+            </div>
+          ) : (
+            <div className="upcoming-list">
+              {upcomingActivities.map(activity => {
+                const dateInfo = formatUpcomingDate(activity.date)
+                const isRegistered = registeredIds.includes(activity.id)
+                
+                return (
+                  <button
+                    key={activity.id}
+                    className="upcoming-item"
+                    onClick={() => handleActivityClick(activity)}
+                  >
+                    <div className="upcoming-date">
+                      <div className="upcoming-date-day">{dateInfo.day}</div>
+                      <div className="upcoming-date-month">{dateInfo.month}</div>
+                    </div>
+                    <div className="upcoming-info">
+                      <div className="upcoming-title">{activity.title}</div>
+                      <div className="upcoming-meta">
+                        {formatTime(activity.startTime)} - {formatTime(activity.endTime)} • {activity.location}
+                      </div>
+                    </div>
+                    <div className="upcoming-tags">
+                      <span className="upcoming-tag">{activity.program}</span>
+                      {isRegistered && <span className="upcoming-tag registered">✓ Registered</span>}
+                      {activity.wheelchairAccessible && <span className="upcoming-tag">♿</span>}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
 
-        {/* Content */}
-        {isLoading ? (
-          <div style={{ display: 'grid', gap: '16px', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
-            {[1, 2, 3].map(i => <ActivityCardSkeleton key={i} />)}
-          </div>
-        ) : error ? (
-          <div style={{ 
-            background: 'var(--toast-error-bg)', 
-            padding: '16px', 
-            borderRadius: 'var(--radius-sm)',
-            color: 'var(--toast-error-text)'
-          }}>
-            {error}
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gap: '16px', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
-            {(activeTab === 'upcoming' ? upcomingActivities : registeredActivities).map(activity => (
-              <Link
-                key={activity.id}
-                href={`/activity/${activity.id}`}
-                style={{
-                  background: 'var(--card)',
-                  padding: '20px',
-                  borderRadius: 'var(--radius-md)',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
-                  textDecoration: 'none',
-                  color: 'inherit',
-                  transition: 'transform 0.2s ease, box-shadow 0.2s ease'
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                  <span style={{ 
-                    padding: '4px 8px', 
-                    background: 'var(--accent-soft)', 
-                    borderRadius: '4px',
-                    fontSize: '0.75rem',
-                    fontWeight: 600
-                  }}>
-                    {activity.program}
-                  </span>
-                  {registeredIds.includes(activity.id) && (
-                    <span style={{ 
-                      padding: '4px 8px', 
-                      background: 'var(--sage)', 
-                      color: 'white',
-                      borderRadius: '4px',
-                      fontSize: '0.75rem'
-                    }}>
-                      Registered
-                    </span>
-                  )}
-                </div>
-                <h3 style={{ fontSize: '1.1rem', marginBottom: '8px' }}>{activity.title}</h3>
-                <p style={{ color: 'var(--muted)', fontSize: '0.9rem', marginBottom: '8px' }}>
-                  {formatDate(activity.date)} • {activity.startTime} - {activity.endTime}
-                </p>
-                <p style={{ color: 'var(--muted)', fontSize: '0.85rem', marginBottom: '12px' }}>
-                  📍 {activity.location}
-                </p>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {activity.wheelchairAccessible && (
-                    <span style={{ fontSize: '0.8rem', color: 'var(--sage)' }}>♿ Accessible</span>
-                  )}
-                  {activity.paymentRequired && (
-                    <span style={{ fontSize: '0.8rem', color: 'var(--accent)' }}>
-                      💰 ${activity.paymentAmount}
-                    </span>
-                  )}
-                  <span style={{ fontSize: '0.8rem', color: 'var(--muted)', marginLeft: 'auto' }}>
-                    {activity.seatsLeft} seats left
-                  </span>
-                </div>
-              </Link>
-            ))}
-            {(activeTab === 'upcoming' ? upcomingActivities : registeredActivities).length === 0 && (
-              <div style={{ 
-                gridColumn: '1 / -1',
-                textAlign: 'center', 
-                padding: '48px', 
-                color: 'var(--muted)' 
-              }}>
-                {activeTab === 'upcoming' 
-                  ? 'No upcoming activities available.' 
-                  : "You haven't registered for any activities yet."}
-              </div>
+        {/* Filters & Calendar */}
+        <div className="dashboard-section">
+          <div className="dashboard-section-header">
+            <h2 className="dashboard-section-title">🗓️ Activity Calendar</h2>
+            {filtersActive && (
+              <button className="button ghost" onClick={resetFilters}>
+                Reset filters
+              </button>
             )}
           </div>
-        )}
+          
+          <div className="filter-row">
+            <input
+              type="search"
+              className="input"
+              placeholder="Search activities..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          
+          <div className="filter-chips" style={{ marginBottom: '20px' }}>
+            {programOptions.map(option => (
+              <button
+                key={option}
+                type="button"
+                className={`chip ${programFilter === option ? 'active' : ''}`}
+                onClick={() => setProgramFilter(option)}
+              >
+                {option}
+              </button>
+            ))}
+            <button
+              type="button"
+              className={`chip ${accessibilityFilter ? 'active' : ''}`}
+              onClick={() => setAccessibilityFilter(!accessibilityFilter)}
+            >
+              ♿ Accessible
+            </button>
+            <button
+              type="button"
+              className={`chip ${freeOnlyFilter ? 'active' : ''}`}
+              onClick={() => setFreeOnlyFilter(!freeOnlyFilter)}
+            >
+              Free only
+            </button>
+          </div>
+
+          {!isLoading && !error && (
+            <CalendarGrid
+              activities={activities}
+              filteredActivities={filteredActivities}
+              onActivityClick={handleActivityClick}
+            />
+          )}
+        </div>
       </section>
+
+      {/* Activity Modal */}
+      <ActivityModal
+        activity={selectedActivity}
+        onClose={() => setSelectedActivity(null)}
+        onRegister={handleRegister}
+        isRegistered={selectedActivity ? registeredIds.includes(selectedActivity.id) : false}
+        registering={registering}
+      />
     </main>
   )
 }

@@ -39,8 +39,8 @@ app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true,
 }))
-app.use(express.json())
-app.use(express.urlencoded({ extended: true }))
+app.use(express.json({ limit: '10mb' }))
+app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
 // Routes
 app.get('/api/health', (req: Request, res: Response) => {
@@ -238,15 +238,31 @@ app.get('/api/activities', async (req: Request, res: Response) => {
     const program = typeof req.query.program === 'string' ? req.query.program : ''
     const role = typeof req.query.role === 'string' ? req.query.role : ''
 
-    const filter: Record<string, string> = {}
+    const filter: Record<string, any> = {}
     if (program) filter.program = program
-    if (role) filter.role = role
+    if (role) filter.roles = { $in: [role] }
 
     const activities = await Activity.find(filter).sort({ date: 1, startTime: 1 })
     res.json({ data: activities })
   } catch (error) {
     console.error('Error fetching activities:', error)
     res.status(500).json({ error: 'Failed to fetch activities' })
+  }
+})
+
+// Get staff users for dropdown
+app.get('/api/users/staff', async (req: Request, res: Response) => {
+  try {
+    const staffUsers = await User.find({ role: 'staff' })
+    const formattedUsers = staffUsers.map(user => ({
+      id: user.id,
+      name: user.name,
+      email: user.email
+    }))
+    res.json({ data: formattedUsers })
+  } catch (error) {
+    console.error('Error fetching staff users:', error)
+    res.status(500).json({ error: 'Failed to fetch staff users' })
   }
 })
 
@@ -276,18 +292,22 @@ app.post('/api/activities', async (req: Request, res: Response) => {
       startTime,
       endTime,
       location,
+      address,
       coordinates,
       program,
-      role,
-      capacity,
-      cadence,
+      roles,
+      participantCapacity,
+      volunteerCapacity,
+      type,
       description = '',
+      imageUrl = '',
       wheelchairAccessible = false,
       paymentRequired = false,
       paymentAmount,
+      staffPresent = [],
+      contactIC = '',
     } = req.body || {}
 
-    const capacityValue = Number(capacity)
     if (
       !title ||
       !date ||
@@ -295,13 +315,10 @@ app.post('/api/activities', async (req: Request, res: Response) => {
       !endTime ||
       !location ||
       !program ||
-      !role ||
-      !cadence ||
-      !capacity ||
-      Number.isNaN(capacityValue) ||
-      capacityValue <= 0
+      !roles ||
+      !type
     ) {
-      res.status(400).json({ error: 'Missing or invalid activity fields.' })
+      res.status(400).json({ error: 'Missing required activity fields.' })
       return
     }
 
@@ -312,16 +329,22 @@ app.post('/api/activities', async (req: Request, res: Response) => {
       startTime,
       endTime,
       location,
-      coordinates: coordinates || { lat: 0, lng: 0 },
+      address: address || '',
+      coordinates: coordinates || { lat: 1.3521, lng: 103.8198 },
       program,
-      role,
-      capacity: capacityValue,
-      seatsLeft: capacityValue,
-      cadence,
+      roles: Array.isArray(roles) ? roles : [roles],
+      participantCapacity: Number(participantCapacity) || 0,
+      volunteerCapacity: Number(volunteerCapacity) || 0,
+      participantSeatsLeft: Number(participantCapacity) || 0,
+      volunteerSeatsLeft: Number(volunteerCapacity) || 0,
+      type,
       description: typeof description === 'string' ? description : '',
+      imageUrl: typeof imageUrl === 'string' ? imageUrl : '',
       wheelchairAccessible: Boolean(wheelchairAccessible),
       paymentRequired: Boolean(paymentRequired),
       paymentAmount: paymentRequired ? Number(paymentAmount) || 0 : undefined,
+      staffPresent: Array.isArray(staffPresent) ? staffPresent : [],
+      contactIC: typeof contactIC === 'string' ? contactIC : '',
     })
 
     await newActivity.save()
@@ -343,39 +366,49 @@ app.patch('/api/activities/:id', async (req: Request, res: Response) => {
     }
 
     const updates = req.body || {}
-    const nextCapacity =
-      updates.capacity !== undefined ? Number(updates.capacity) : activity.capacity
-
-    if (Number.isNaN(nextCapacity) || nextCapacity <= 0) {
-      res.status(400).json({ error: 'Capacity must be a positive number.' })
-      return
-    }
-
-    const occupied = activity.capacity - activity.seatsLeft
-    const nextSeatsLeft = Math.max(nextCapacity - occupied, 0)
 
     activity.title = updates.title ?? activity.title
     activity.date = updates.date ?? activity.date
     activity.startTime = updates.startTime ?? activity.startTime
     activity.endTime = updates.endTime ?? activity.endTime
     activity.location = updates.location ?? activity.location
+    activity.address = updates.address ?? activity.address
     if (updates.coordinates) {
       activity.coordinates = updates.coordinates
     }
     activity.program = updates.program ?? activity.program
-    activity.role = updates.role ?? activity.role
-    activity.cadence = updates.cadence ?? activity.cadence
+    if (updates.roles) {
+      activity.roles = Array.isArray(updates.roles) ? updates.roles : [updates.roles]
+    }
+    activity.type = updates.type ?? activity.type
     activity.description =
       typeof updates.description === 'string'
         ? updates.description
         : activity.description
+    if (updates.imageUrl !== undefined) {
+      activity.imageUrl = updates.imageUrl
+    }
     activity.wheelchairAccessible = updates.wheelchairAccessible ?? activity.wheelchairAccessible
     activity.paymentRequired = updates.paymentRequired ?? activity.paymentRequired
     if (updates.paymentAmount !== undefined) {
       activity.paymentAmount = Number(updates.paymentAmount)
     }
-    activity.capacity = nextCapacity
-    activity.seatsLeft = nextSeatsLeft
+    if (updates.participantCapacity !== undefined) {
+      const occupied = activity.participantCapacity - activity.participantSeatsLeft
+      activity.participantCapacity = Number(updates.participantCapacity) || 0
+      activity.participantSeatsLeft = Math.max(activity.participantCapacity - occupied, 0)
+    }
+    if (updates.volunteerCapacity !== undefined) {
+      const occupied = activity.volunteerCapacity - activity.volunteerSeatsLeft
+      activity.volunteerCapacity = Number(updates.volunteerCapacity) || 0
+      activity.volunteerSeatsLeft = Math.max(activity.volunteerCapacity - occupied, 0)
+    }
+    if (updates.staffPresent !== undefined) {
+      activity.staffPresent = Array.isArray(updates.staffPresent) ? updates.staffPresent : []
+    }
+    if (updates.contactIC !== undefined) {
+      activity.contactIC = updates.contactIC
+    }
 
     await activity.save()
     res.json({ data: activity })
@@ -405,6 +438,63 @@ app.delete('/api/activities/:id', async (req: Request, res: Response) => {
   }
 })
 
+// Get featured activity
+app.get('/api/activities/featured/current', async (req: Request, res: Response) => {
+  try {
+    const featuredActivity = await Activity.findOne({ featured: true })
+    res.json({ data: featuredActivity })
+  } catch (error) {
+    console.error('Error fetching featured activity:', error)
+    res.status(500).json({ error: 'Failed to fetch featured activity' })
+  }
+})
+
+// Set featured activity
+app.post('/api/activities/:id/feature', async (req: Request, res: Response) => {
+  try {
+    // First, unset any existing featured activity
+    await Activity.updateMany({}, { featured: false })
+
+    // Then set the new featured activity
+    const activity = await Activity.findOneAndUpdate(
+      { id: req.params.id },
+      { featured: true },
+      { new: true }
+    )
+
+    if (!activity) {
+      res.status(404).json({ error: 'Activity not found.' })
+      return
+    }
+
+    res.json({ data: activity, message: 'Activity is now featured' })
+  } catch (error) {
+    console.error('Error setting featured activity:', error)
+    res.status(500).json({ error: 'Failed to set featured activity' })
+  }
+})
+
+// Unset featured activity
+app.delete('/api/activities/:id/feature', async (req: Request, res: Response) => {
+  try {
+    const activity = await Activity.findOneAndUpdate(
+      { id: req.params.id },
+      { featured: false },
+      { new: true }
+    )
+
+    if (!activity) {
+      res.status(404).json({ error: 'Activity not found.' })
+      return
+    }
+
+    res.json({ data: activity, message: 'Activity is no longer featured' })
+  } catch (error) {
+    console.error('Error unsetting featured activity:', error)
+    res.status(500).json({ error: 'Failed to unset featured activity' })
+  }
+})
+
 // Create registration
 app.post('/api/registrations', async (req: Request, res: Response) => {
   try {
@@ -430,7 +520,13 @@ app.post('/api/registrations', async (req: Request, res: Response) => {
       return
     }
 
-    if (activity.seatsLeft <= 0) {
+    // Check seats based on registration role
+    const isVolunteer = role === 'Volunteer'
+    const availableSeats = isVolunteer 
+      ? activity.volunteerSeatsLeft 
+      : activity.participantSeatsLeft
+
+    if (availableSeats <= 0) {
       res.status(409).json({ error: 'No seats left for this activity.' })
       return
     }
@@ -448,8 +544,12 @@ app.post('/api/registrations', async (req: Request, res: Response) => {
       attended: false,
     })
 
-    // Update seats left
-    activity.seatsLeft = Math.max(activity.seatsLeft - 1, 0)
+    // Update seats left based on registration role
+    if (isVolunteer) {
+      activity.volunteerSeatsLeft = Math.max(activity.volunteerSeatsLeft - 1, 0)
+    } else {
+      activity.participantSeatsLeft = Math.max(activity.participantSeatsLeft - 1, 0)
+    }
     
     await Promise.all([registration.save(), activity.save()])
     res.status(201).json({ data: registration })
@@ -510,11 +610,17 @@ app.delete('/api/registrations/:id', async (req: Request, res: Response) => {
       return
     }
 
-    // Restore seat in the activity
+    // Restore seat in the activity based on registration role
     const activity = await Activity.findOne({ id: registration.activityId })
-    if (activity && activity.seatsLeft < activity.capacity) {
-      activity.seatsLeft += 1
-      await activity.save()
+    if (activity) {
+      const isVolunteer = registration.role === 'Volunteer'
+      if (isVolunteer && activity.volunteerSeatsLeft < activity.volunteerCapacity) {
+        activity.volunteerSeatsLeft += 1
+        await activity.save()
+      } else if (!isVolunteer && activity.participantSeatsLeft < activity.participantCapacity) {
+        activity.participantSeatsLeft += 1
+        await activity.save()
+      }
     }
 
     await Registration.deleteOne({ id: req.params.id })

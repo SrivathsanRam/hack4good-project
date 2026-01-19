@@ -7,19 +7,26 @@ export interface IActivity extends Document {
   startTime: string
   endTime: string
   location: string
+  address: string
   coordinates: {
     lat: number
     lng: number
   }
   program: string
-  role: 'Participants' | 'Volunteers'
-  capacity: number
-  seatsLeft: number
-  cadence: string
+  roles: string[] // ['Participant', 'Volunteer', 'Volunteers Only']
+  participantCapacity: number
+  volunteerCapacity: number
+  participantSeatsLeft: number
+  volunteerSeatsLeft: number
+  type: string // renamed from cadence
   description: string
+  imageUrl: string
   wheelchairAccessible: boolean
   paymentRequired: boolean
   paymentAmount?: number
+  staffPresent: string[] // Array of staff user IDs
+  contactIC: string // Single staff user ID
+  featured: boolean // Whether this activity is featured on homepage
   createdAt: Date
   updatedAt: Date
 }
@@ -53,14 +60,19 @@ const ActivitySchema = new Schema<IActivity>(
       required: true,
       trim: true,
     },
+    address: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     coordinates: {
       lat: {
         type: Number,
-        required: true,
+        default: 1.3521,
       },
       lng: {
         type: Number,
-        required: true,
+        default: 103.8198,
       },
     },
     program: {
@@ -68,27 +80,42 @@ const ActivitySchema = new Schema<IActivity>(
       required: true,
       enum: ['Movement', 'Creative', 'Caregiver sessions'],
     },
-    role: {
-      type: String,
+    roles: {
+      type: [String],
       required: true,
-      enum: ['Participants', 'Volunteers'],
+      default: ['Participant'],
     },
-    capacity: {
+    participantCapacity: {
       type: Number,
-      required: true,
-      min: 1,
-    },
-    seatsLeft: {
-      type: Number,
-      required: true,
+      default: 0,
       min: 0,
     },
-    cadence: {
+    volunteerCapacity: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    participantSeatsLeft: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    volunteerSeatsLeft: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    type: {
       type: String,
       required: true,
-      enum: ['Ad hoc', 'Weekly', 'Twice weekly'],
+      enum: ['Weekly', 'Fortnightly', 'Monthly', 'One-off'],
+      default: 'One-off',
     },
     description: {
+      type: String,
+      default: '',
+    },
+    imageUrl: {
       type: String,
       default: '',
     },
@@ -109,6 +136,18 @@ const ActivitySchema = new Schema<IActivity>(
         return this.paymentRequired;
       },
     },
+    staffPresent: {
+      type: [String],
+      default: [],
+    },
+    contactIC: {
+      type: String,
+      default: '',
+    },
+    featured: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,
@@ -117,7 +156,7 @@ const ActivitySchema = new Schema<IActivity>(
 
 // Create index for common queries
 ActivitySchema.index({ program: 1 })
-ActivitySchema.index({ role: 1 })
+ActivitySchema.index({ roles: 1 })
 ActivitySchema.index({ date: 1 })
 
 export default mongoose.model<IActivity>('Activity', ActivitySchema)

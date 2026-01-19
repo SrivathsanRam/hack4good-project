@@ -1,11 +1,68 @@
+'use client'
+
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
+
+const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+
+type FeaturedActivity = {
+  id: string
+  title: string
+  date: string
+  startTime: string
+  endTime: string
+  location: string
+  program: string
+  description: string
+  imageUrl?: string
+  participantCapacity?: number
+  volunteerCapacity?: number
+  participantSeatsLeft?: number
+  volunteerSeatsLeft?: number
+}
+
+const formatDate = (isoDate: string) => {
+  const date = new Date(`${isoDate}T00:00:00`)
+  return date.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  })
+}
 
 export default function Home() {
+  const [featuredActivity, setFeaturedActivity] = useState<FeaturedActivity | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchFeatured = async () => {
+      try {
+        const res = await fetch(`${apiBase}/api/activities/featured/current`)
+        if (res.ok) {
+          const data = await res.json()
+          setFeaturedActivity(data.data || null)
+        }
+      } catch (err) {
+        console.error('Failed to fetch featured activity:', err)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchFeatured()
+  }, [])
+
+  const getCapacity = (a: FeaturedActivity) => {
+    return (a.participantCapacity ?? 0) + (a.volunteerCapacity ?? 0)
+  }
+
+  const getSeatsLeft = (a: FeaturedActivity) => {
+    return (a.participantSeatsLeft ?? 0) + (a.volunteerSeatsLeft ?? 0)
+  }
+
   return (
     <div className="container">
       <section className="hero reveal">
         <div>
-          <span className="badge">Prototype: unified activities</span>
           <h1>One calendar that respects every schedule.</h1>
           <p>
             Participants, volunteers, and staff all work from the same activity
@@ -22,26 +79,94 @@ export default function Home() {
           </div>
         </div>
         <div className="hero-card">
-          <h3>Today's focus</h3>
-          <p>
-            Consolidate activity schedules, capture attendance details up front,
-            and lower weekly admin time by half.
-          </p>
-          <div className="empty-state" style={{ marginTop: '18px' }}>
-            <strong>No activities loaded yet</strong>
-            <span>Connect the calendar feed to preview real sessions.</span>
-          </div>
+          <h3>Featured Activity ⭐</h3>
+          {isLoading ? (
+            <div style={{ padding: '20px 0', color: 'var(--muted)' }}>
+              Loading...
+            </div>
+          ) : featuredActivity ? (
+            <div style={{ marginTop: '12px' }}>
+              {featuredActivity.imageUrl && (
+                <div style={{ 
+                  borderRadius: '8px', 
+                  overflow: 'hidden', 
+                  marginBottom: '12px',
+                  maxHeight: '150px'
+                }}>
+                  <img 
+                    src={featuredActivity.imageUrl} 
+                    alt={featuredActivity.title}
+                    style={{ 
+                      width: '100%', 
+                      height: '150px', 
+                      objectFit: 'cover' 
+                    }}
+                  />
+                </div>
+              )}
+              <h4 style={{ fontSize: '1.1rem', marginBottom: '8px' }}>
+                {featuredActivity.title}
+              </h4>
+              <p style={{ 
+                color: 'var(--muted)', 
+                fontSize: '0.9rem', 
+                marginBottom: '8px' 
+              }}>
+                {formatDate(featuredActivity.date)} • {featuredActivity.startTime} - {featuredActivity.endTime}
+              </p>
+              <p style={{ 
+                color: 'var(--muted)', 
+                fontSize: '0.85rem', 
+                marginBottom: '8px' 
+              }}>
+                📍 {featuredActivity.location}
+              </p>
+              {featuredActivity.description && (
+                <p style={{ 
+                  fontSize: '0.9rem', 
+                  marginBottom: '12px',
+                  lineHeight: 1.5 
+                }}>
+                  {featuredActivity.description.length > 120 
+                    ? featuredActivity.description.slice(0, 120) + '...' 
+                    : featuredActivity.description}
+                </p>
+              )}
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                marginTop: '12px'
+              }}>
+                <span style={{ 
+                  fontSize: '0.85rem', 
+                  color: 'var(--muted)' 
+                }}>
+                  {getSeatsLeft(featuredActivity)}/{getCapacity(featuredActivity)} spots left
+                </span>
+                <Link 
+                  href={`/activity/${featuredActivity.id}`}
+                  className="button primary"
+                  style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+                >
+                  View Details
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <div className="empty-state" style={{ marginTop: '18px' }}>
+              <strong>No featured activity</strong>
+              <span>Staff can feature an activity from the dashboard.</span>
+            </div>
+          )}
         </div>
       </section>
 
       <section className="section reveal delay-1">
         <div className="section-heading">
           <span className="section-eyebrow">At a glance</span>
-          <h2 className="section-title">Prototype outcomes</h2>
-          <p className="section-subtitle">
-            The goal is a single scheduling surface that removes double booking
-            and keeps every role aligned.
-          </p>
+          <h2 className="section-title">Outcomes</h2>
+
         </div>
         <div className="stat-grid">
           <div className="stat-card">
@@ -60,7 +185,7 @@ export default function Home() {
             <span className="stat-foot">Ready for live data.</span>
           </div>
           <div className="stat-card">
-            <span className="stat-value">4 hrs</span>
+            <span className="stat-value">2 hrs</span>
             <span className="stat-label">Target weekly admin time</span>
             <span className="stat-foot">Down from 8+ hours today.</span>
           </div>
