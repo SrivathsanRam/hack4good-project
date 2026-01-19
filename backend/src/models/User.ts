@@ -12,6 +12,8 @@ export interface IUser extends Document {
   preferences?: string[]
   disabilities?: string
   mobilityStatus?: 'can walk' | 'cannot walk' | 'cannot walk long distances'
+  homeAddress?: string
+  homeCoordinates?: { lat: number; lng: number }
   onboardingComplete: boolean
   createdAt: Date
   updatedAt: Date
@@ -62,6 +64,16 @@ const UserSchema = new Schema<IUser>(
     mobilityStatus: {
       type: String,
       enum: ['can walk', 'cannot walk', 'cannot walk long distances'],
+    },
+    homeAddress: {
+      type: String,
+      default: '',
+    },
+    homeCoordinates: {
+      type: {
+        lat: Number,
+        lng: Number,
+      },
     },
     onboardingComplete: {
       type: Boolean,

@@ -159,7 +159,7 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
 // Complete onboarding (for participants)
 app.post('/api/auth/onboarding', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const { membership, preferences, disabilities, mobilityStatus } = req.body || {}
+    const { membership, preferences, disabilities, mobilityStatus, homeAddress, homeCoordinates } = req.body || {}
     const userId = (req as any).user.id
 
     const user = await User.findOne({ id: userId })
@@ -177,6 +177,8 @@ app.post('/api/auth/onboarding', authenticateToken, async (req: Request, res: Re
     user.preferences = preferences || []
     user.disabilities = disabilities || ''
     user.mobilityStatus = mobilityStatus
+    user.homeAddress = homeAddress || ''
+    user.homeCoordinates = homeCoordinates || undefined
     user.onboardingComplete = true
 
     await user.save()
@@ -191,6 +193,8 @@ app.post('/api/auth/onboarding', authenticateToken, async (req: Request, res: Re
         preferences: user.preferences,
         disabilities: user.disabilities,
         mobilityStatus: user.mobilityStatus,
+        homeAddress: user.homeAddress,
+        homeCoordinates: user.homeCoordinates,
         onboardingComplete: user.onboardingComplete,
       },
     })
@@ -600,7 +604,50 @@ app.patch('/api/registrations/:id', async (req: Request, res: Response) => {
   }
 })
 
-// Delete registration
+// Delete registration by activityId and email (for uncommitting)
+app.delete('/api/registrations/by-activity/:activityId', async (req: Request, res: Response) => {
+  try {
+    const { activityId } = req.params
+    const { email, role } = req.query
+
+    if (!email) {
+      res.status(400).json({ error: 'Email is required' })
+      return
+    }
+
+    const registration = await Registration.findOne({ 
+      activityId, 
+      email: String(email).toLowerCase(),
+      ...(role ? { role: String(role) } : {})
+    })
+
+    if (!registration) {
+      res.status(404).json({ error: 'Registration not found.' })
+      return
+    }
+
+    // Restore seat in the activity based on registration role
+    const activity = await Activity.findOne({ id: registration.activityId })
+    if (activity) {
+      const isVolunteer = registration.role === 'Volunteer'
+      if (isVolunteer && activity.volunteerSeatsLeft < activity.volunteerCapacity) {
+        activity.volunteerSeatsLeft += 1
+        await activity.save()
+      } else if (!isVolunteer && activity.participantSeatsLeft < activity.participantCapacity) {
+        activity.participantSeatsLeft += 1
+        await activity.save()
+      }
+    }
+
+    await Registration.deleteOne({ id: registration.id })
+    res.json({ message: 'Registration deleted successfully' })
+  } catch (error) {
+    console.error('Error deleting registration by activity:', error)
+    res.status(500).json({ error: 'Failed to delete registration' })
+  }
+})
+
+// Delete registration by id
 app.delete('/api/registrations/:id', async (req: Request, res: Response) => {
   try {
     const registration = await Registration.findOne({ id: req.params.id })

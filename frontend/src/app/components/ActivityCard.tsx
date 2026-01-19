@@ -79,13 +79,15 @@ export default function ActivityCard({ activity, isFiltered = false, compact = f
     }
   }
 
+  const isVolunteersOnly = roles.includes('Volunteers Only')
+
   if (compact) {
     if (onClick) {
       return (
         <button
           type="button"
           onClick={handleClick}
-          className={`activity-compact ${isFiltered ? 'filtered' : ''} ${isFull ? 'full' : ''}`}
+          className={`activity-compact ${isFiltered ? 'filtered' : ''} ${isFull ? 'full' : ''} ${isVolunteersOnly ? 'volunteers-only' : ''}`}
           title={`${activity.title} - ${formatTime(activity.startTime)} to ${formatTime(activity.endTime)}`}
         >
           {activity.imageUrl && (
@@ -109,7 +111,7 @@ export default function ActivityCard({ activity, isFiltered = false, compact = f
     return (
       <Link 
         href={`/activity/${activity.id}`}
-        className={`activity-compact ${isFiltered ? 'filtered' : ''} ${isFull ? 'full' : ''}`}
+        className={`activity-compact ${isFiltered ? 'filtered' : ''} ${isFull ? 'full' : ''} ${isVolunteersOnly ? 'volunteers-only' : ''}`}
         title={`${activity.title} - ${formatTime(activity.startTime)} to ${formatTime(activity.endTime)}`}
       >
         {activity.imageUrl && (

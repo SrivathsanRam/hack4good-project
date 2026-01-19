@@ -24,6 +24,7 @@ export default function VolunteerDashboard() {
   // Modal state
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
   const [registering, setRegistering] = useState(false)
+  const [unregistering, setUnregistering] = useState(false)
   
   // Filters
   const [searchTerm, setSearchTerm] = useState('')
@@ -48,15 +49,22 @@ export default function VolunteerDashboard() {
     const fetchData = async () => {
       setIsLoading(true)
       try {
+        // Fetch all activities and filter client-side for volunteer-related roles
         const [activitiesRes, registrationsRes] = await Promise.all([
-          fetch(`${apiBase}/api/activities?role=Volunteer`),
+          fetch(`${apiBase}/api/activities`),
           fetch(`${apiBase}/api/registrations`)
         ])
 
         if (!activitiesRes.ok) throw new Error('Failed to fetch activities')
         
         const activitiesData = await activitiesRes.json()
-        setActivities(activitiesData.data || [])
+        // Filter for activities that include Volunteer or Volunteers Only in roles
+        const allActivities = activitiesData.data || []
+        const volunteerActivities = allActivities.filter((a: Activity) => {
+          const roles = a.roles || (a.role ? [a.role] : [])
+          return roles.includes('Volunteer') || roles.includes('Volunteers Only')
+        })
+        setActivities(volunteerActivities)
 
         if (registrationsRes.ok) {
           const registrationsData = await registrationsRes.json()
@@ -131,17 +139,49 @@ export default function VolunteerDashboard() {
           name: user.name,
           email: user.email,
           role: 'Volunteer',
+          membership: 'Ad hoc', // Valid enum value for registration
         }),
       })
       
-      if (!response.ok) throw new Error('Commitment failed')
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        console.error('Registration failed:', response.status, errorData)
+        throw new Error(errorData.error || 'Commitment failed')
+      }
       
       setCommitmentIds(prev => [...prev, activity.id])
       setSelectedActivity(null)
     } catch (err) {
       console.error('Commitment error:', err)
+      alert(err instanceof Error ? err.message : 'Failed to commit to activity')
     } finally {
       setRegistering(false)
+    }
+  }
+
+  const handleUncommit = async (activity: Activity) => {
+    if (!user) return
+    
+    setUnregistering(true)
+    try {
+      const response = await fetch(
+        `${apiBase}/api/registrations/by-activity/${activity.id}?email=${encodeURIComponent(user.email)}&role=Volunteer`,
+        { method: 'DELETE' }
+      )
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        console.error('Unregister failed:', response.status, errorData)
+        throw new Error(errorData.error || 'Failed to withdraw commitment')
+      }
+      
+      setCommitmentIds(prev => prev.filter(id => id !== activity.id))
+      setSelectedActivity(null)
+    } catch (err) {
+      console.error('Uncommit error:', err)
+      alert(err instanceof Error ? err.message : 'Failed to withdraw commitment')
+    } finally {
+      setUnregistering(false)
     }
   }
 
@@ -168,6 +208,11 @@ export default function VolunteerDashboard() {
   }
 
   const filtersActive = programFilter !== 'All programs' || searchTerm.trim() !== '' || accessibilityFilter
+
+  const isVolunteersOnly = (activity: Activity) => {
+    const roles = activity.roles || (activity.role ? [activity.role] : [])
+    return roles.includes('Volunteers Only')
+  }
 
   const resetFilters = () => {
     setProgramFilter('All programs')
@@ -237,11 +282,12 @@ export default function VolunteerDashboard() {
             <div className="upcoming-list">
               {myCommitments.slice(0, 3).map(activity => {
                 const dateInfo = formatUpcomingDate(activity.date)
+                const volunteersOnly = isVolunteersOnly(activity)
                 
                 return (
                   <button
                     key={activity.id}
-                    className="upcoming-item"
+                    className={`upcoming-item ${volunteersOnly ? 'volunteers-only' : ''}`}
                     onClick={() => handleActivityClick(activity)}
                   >
                     <div className="upcoming-date">
@@ -256,6 +302,7 @@ export default function VolunteerDashboard() {
                     </div>
                     <div className="upcoming-tags">
                       <span className="upcoming-tag">{activity.program}</span>
+                      {volunteersOnly && <span className="upcoming-tag volunteers-only-tag">⭐ Volunteers Only</span>}
                       <span className="upcoming-tag registered">✓ Committed</span>
                     </div>
                   </button>
@@ -291,11 +338,12 @@ export default function VolunteerDashboard() {
               {upcomingOpportunities.map(activity => {
                 const dateInfo = formatUpcomingDate(activity.date)
                 const isCommitted = commitmentIds.includes(activity.id)
+                const volunteersOnly = isVolunteersOnly(activity)
                 
                 return (
                   <button
                     key={activity.id}
-                    className="upcoming-item"
+                    className={`upcoming-item ${volunteersOnly ? 'volunteers-only' : ''}`}
                     onClick={() => handleActivityClick(activity)}
                   >
                     <div className="upcoming-date">
@@ -310,6 +358,7 @@ export default function VolunteerDashboard() {
                     </div>
                     <div className="upcoming-tags">
                       <span className="upcoming-tag">{activity.program}</span>
+                      {volunteersOnly && <span className="upcoming-tag volunteers-only-tag">⭐ Volunteers Only</span>}
                       {isCommitted && <span className="upcoming-tag registered">✓ Committed</span>}
                       {activity.wheelchairAccessible && <span className="upcoming-tag">♿</span>}
                     </div>
@@ -376,8 +425,11 @@ export default function VolunteerDashboard() {
         activity={selectedActivity}
         onClose={() => setSelectedActivity(null)}
         onRegister={handleCommit}
+        onUnregister={handleUncommit}
         isRegistered={selectedActivity ? commitmentIds.includes(selectedActivity.id) : false}
         registering={registering}
+        unregistering={unregistering}
+        userRole="volunteer"
       />
     </main>
   )

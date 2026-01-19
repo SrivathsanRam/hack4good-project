@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '../../context/AuthContext'
+import LocationPicker from '../../components/LocationPicker'
 
 const membershipOptions = [
   { value: 'Ad hoc', label: 'Ad hoc engagement', description: 'Drop in when it suits you' },
@@ -34,6 +35,8 @@ export default function OnboardingPage() {
   const [preferences, setPreferences] = useState<string[]>([])
   const [disabilities, setDisabilities] = useState('')
   const [mobilityStatus, setMobilityStatus] = useState('')
+  const [homeAddress, setHomeAddress] = useState('')
+  const [homeCoordinates, setHomeCoordinates] = useState({ lat: 1.3521, lng: 103.8198 })
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -67,6 +70,10 @@ export default function OnboardingPage() {
       setError('Please select your mobility status')
       return
     }
+    if (step === 3 && !homeAddress) {
+      setError('Please enter your home address')
+      return
+    }
     setStep(step + 1)
   }
 
@@ -84,6 +91,8 @@ export default function OnboardingPage() {
       preferences,
       disabilities,
       mobilityStatus,
+      homeAddress,
+      homeCoordinates,
     })
 
     if (result.success) {
@@ -115,7 +124,7 @@ export default function OnboardingPage() {
           {/* Progress indicator */}
           <div style={{ marginBottom: '32px' }}>
             <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '16px' }}>
-              {[1, 2, 3].map((s) => (
+              {[1, 2, 3, 4].map((s) => (
                 <div
                   key={s}
                   style={{
@@ -129,7 +138,7 @@ export default function OnboardingPage() {
               ))}
             </div>
             <p style={{ textAlign: 'center', color: 'var(--muted)', fontSize: '0.9rem' }}>
-              Step {step} of 3
+              Step {step} of 4
             </p>
           </div>
 
@@ -140,7 +149,8 @@ export default function OnboardingPage() {
             <p style={{ color: 'var(--muted)' }}>
               {step === 1 && "Let's start by understanding your engagement preferences."}
               {step === 2 && "Tell us about your accessibility needs."}
-              {step === 3 && "Almost done! Review your preferences."}
+              {step === 3 && "Where do you live? This helps us show travel directions."}
+              {step === 4 && "Almost done! Review your preferences."}
             </p>
           </div>
 
@@ -278,8 +288,26 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* Step 3: Review */}
+          {/* Step 3: Home Address */}
           {step === 3 && (
+            <div>
+              <h2 style={{ fontSize: '1.1rem', marginBottom: '16px' }}>
+                📍 Your Home Address
+              </h2>
+              <p style={{ color: 'var(--muted)', marginBottom: '16px', fontSize: '0.9rem' }}>
+                This helps us show you directions to activities. Your address is kept private.
+              </p>
+              <LocationPicker
+                address={homeAddress}
+                coordinates={homeCoordinates}
+                onAddressChange={setHomeAddress}
+                onCoordinatesChange={setHomeCoordinates}
+              />
+            </div>
+          )}
+
+          {/* Step 4: Review */}
+          {step === 4 && (
             <div>
               <h2 style={{ fontSize: '1.1rem', marginBottom: '24px' }}>
                 Review Your Profile
@@ -332,6 +360,13 @@ export default function OnboardingPage() {
                     </div>
                   </div>
                 )}
+
+                {homeAddress && (
+                  <div style={{ marginTop: '16px' }}>
+                    <div style={{ color: 'var(--muted)', fontSize: '0.85rem', marginBottom: '4px' }}>Home Address</div>
+                    <div style={{ fontSize: '0.9rem' }}>{homeAddress}</div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -354,7 +389,7 @@ export default function OnboardingPage() {
               </button>
             )}
             
-            {step < 3 ? (
+            {step < 4 ? (
               <button
                 type="button"
                 onClick={handleNext}

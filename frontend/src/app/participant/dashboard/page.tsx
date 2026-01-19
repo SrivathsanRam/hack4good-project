@@ -24,6 +24,7 @@ export default function ParticipantDashboard() {
   // Modal state
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
   const [registering, setRegistering] = useState(false)
+  const [unregistering, setUnregistering] = useState(false)
   
   // Filters
   const [searchTerm, setSearchTerm] = useState('')
@@ -111,6 +112,11 @@ export default function ParticipantDashboard() {
       .slice(0, 5)
   }, [filteredActivities])
 
+  // My registered activities (for timing clash detection)
+  const registeredActivities = useMemo(() => {
+    return activities.filter(a => registeredIds.includes(a.id))
+  }, [activities, registeredIds])
+
   const handleActivityClick = (activity: Activity) => {
     setSelectedActivity(activity)
   }
@@ -128,17 +134,47 @@ export default function ParticipantDashboard() {
           name: user.name,
           email: user.email,
           role: 'Participant',
+          membership: user.membership || 'Ad hoc',
         }),
       })
       
-      if (!response.ok) throw new Error('Registration failed')
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Registration failed')
+      }
       
       setRegisteredIds(prev => [...prev, activity.id])
       setSelectedActivity(null)
     } catch (err) {
       console.error('Registration error:', err)
+      alert(err instanceof Error ? err.message : 'Failed to register')
     } finally {
       setRegistering(false)
+    }
+  }
+
+  const handleUnregister = async (activity: Activity) => {
+    if (!user) return
+    
+    setUnregistering(true)
+    try {
+      const response = await fetch(
+        `${apiBase}/api/registrations/by-activity/${activity.id}?email=${encodeURIComponent(user.email)}`,
+        { method: 'DELETE' }
+      )
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to unregister')
+      }
+      
+      setRegisteredIds(prev => prev.filter(id => id !== activity.id))
+      setSelectedActivity(null)
+    } catch (err) {
+      console.error('Unregister error:', err)
+      alert(err instanceof Error ? err.message : 'Failed to unregister')
+    } finally {
+      setUnregistering(false)
     }
   }
 
@@ -218,6 +254,56 @@ export default function ParticipantDashboard() {
             </div>
           </div>
         </div>
+
+        {/* My Activities - Registered */}
+        {registeredActivities.length > 0 && (
+          <div className="dashboard-section">
+            <div className="dashboard-section-header">
+              <h2 className="dashboard-section-title">✅ My Activities</h2>
+              <span style={{ color: 'var(--muted)', fontSize: '0.9rem' }}>
+                {registeredActivities.length} registered
+              </span>
+            </div>
+            
+            <div className="upcoming-list">
+              {registeredActivities
+                .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                .slice(0, 5)
+                .map(activity => {
+                  const dateInfo = formatUpcomingDate(activity.date)
+                  
+                  return (
+                    <button
+                      key={activity.id}
+                      className="upcoming-item"
+                      onClick={() => handleActivityClick(activity)}
+                    >
+                      <div className="upcoming-date">
+                        <div className="upcoming-date-day">{dateInfo.day}</div>
+                        <div className="upcoming-date-month">{dateInfo.month}</div>
+                      </div>
+                      <div className="upcoming-info">
+                        <div className="upcoming-title">{activity.title}</div>
+                        <div className="upcoming-meta">
+                          {formatTime(activity.startTime)} - {formatTime(activity.endTime)} • {activity.location}
+                        </div>
+                      </div>
+                      <div className="upcoming-tags">
+                        <span className="upcoming-tag">{activity.program}</span>
+                        <span className="upcoming-tag registered">✓ Registered</span>
+                        {activity.wheelchairAccessible && <span className="upcoming-tag">♿</span>}
+                      </div>
+                    </button>
+                  )
+                })}
+              {registeredActivities.length > 5 && (
+                <p style={{ textAlign: 'center', color: 'var(--muted)', padding: '8px', fontSize: '0.9rem' }}>
+                  + {registeredActivities.length - 5} more registered activities
+                </p>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Upcoming Activities */}
         <div className="dashboard-section">
@@ -337,8 +423,14 @@ export default function ParticipantDashboard() {
         activity={selectedActivity}
         onClose={() => setSelectedActivity(null)}
         onRegister={handleRegister}
+        onUnregister={handleUnregister}
         isRegistered={selectedActivity ? registeredIds.includes(selectedActivity.id) : false}
         registering={registering}
+        unregistering={unregistering}
+        userRole="participant"
+        userHomeCoordinates={user.homeCoordinates}
+        userMobilityStatus={user.mobilityStatus}
+        registeredActivities={registeredActivities}
       />
     </main>
   )

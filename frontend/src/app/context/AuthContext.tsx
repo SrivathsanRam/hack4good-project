@@ -15,6 +15,8 @@ export type User = {
   preferences?: string[]
   disabilities?: string
   mobilityStatus?: string
+  homeAddress?: string
+  homeCoordinates?: { lat: number; lng: number }
   onboardingComplete: boolean
 }
 
@@ -39,6 +41,8 @@ type OnboardingData = {
   preferences: string[]
   disabilities: string
   mobilityStatus: string
+  homeAddress: string
+  homeCoordinates: { lat: number; lng: number }
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)

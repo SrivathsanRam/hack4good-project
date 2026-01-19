@@ -52,6 +52,14 @@ export default function CalendarPage() {
     accessibilityFilter ||
     freeOnlyFilter
 
+  // Filter out "Volunteers Only" activities - they should only appear on /volunteer page
+  const publicActivities = useMemo(() => {
+    return activities.filter(activity => {
+      const activityRoles = activity.roles || (activity.role ? [activity.role] : [])
+      return !activityRoles.includes('Volunteers Only')
+    })
+  }, [activities])
+
   const resetFilters = () => {
     setProgramFilter('All programs')
     setRoleFilter('All roles')
@@ -63,17 +71,17 @@ export default function CalendarPage() {
   }
 
   const summaryStats = useMemo(() => {
-    const total = activities.length
+    const total = publicActivities.length
     // Support both old role field and new roles array
-    const participantSessions = activities.filter(a => 
+    const participantSessions = publicActivities.filter(a => 
       a.roles?.includes('Participant') || a.role === 'Participant'
     ).length
-    const volunteerSessions = activities.filter(a => 
-      a.roles?.includes('Volunteer') || a.roles?.includes('Volunteers Only') || a.role === 'Volunteer'
+    const volunteerSessions = publicActivities.filter(a => 
+      a.roles?.includes('Volunteer') || a.role === 'Volunteer'
     ).length
-    const uniqueDays = new Set(activities.map(a => a.date)).size
+    const uniqueDays = new Set(publicActivities.map(a => a.date)).size
     return { total, participantSessions, volunteerSessions, uniqueDays }
-  }, [activities])
+  }, [publicActivities])
 
   const filteredActivities = useMemo(() => {
     const searchLower = searchTerm.toLowerCase().trim()
@@ -82,11 +90,12 @@ export default function CalendarPage() {
     const rangeDays =
       dateRange === 'Next 7 days' ? 7 : dateRange === 'Next 30 days' ? 30 : null
 
-    return activities.filter((activity) => {
+    return publicActivities.filter((activity) => {
+      const activityRoles = activity.roles || (activity.role ? [activity.role] : [])
+
       const matchesProgram =
         programFilter === 'All programs' || activity.program === programFilter
       // Support both old role field and new roles array
-      const activityRoles = activity.roles || (activity.role ? [activity.role] : [])
       const matchesRole = roleFilter === 'All roles' || activityRoles.includes(roleFilter)
       // Support both old cadence field and new type field
       const activityType = activity.type || activity.cadence || ''
@@ -166,8 +175,8 @@ export default function CalendarPage() {
   }, [filteredActivities])
 
   const matchRate =
-    activities.length > 0
-      ? Math.round((filteredActivities.length / activities.length) * 100)
+    publicActivities.length > 0
+      ? Math.round((filteredActivities.length / publicActivities.length) * 100)
       : 0
 
   const programSummary = useMemo(() => {
@@ -468,7 +477,7 @@ export default function CalendarPage() {
 
         {viewMode === 'Calendar' ? (
           <CalendarGrid 
-            activities={activities}
+            activities={publicActivities}
             filteredActivities={filteredActivities}
           />
         ) : filteredActivities.length === 0 ? (
