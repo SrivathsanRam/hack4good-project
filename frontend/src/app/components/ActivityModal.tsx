@@ -242,7 +242,7 @@ export default function ActivityModal({
                 className="button directions"
                 onClick={(e) => e.stopPropagation()}
               >
-                🧭 Directions
+                Directions
               </a>
             )}
             {isRegistered ? (
