@@ -3,7 +3,7 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import jwt from 'jsonwebtoken'
 import connectDB from './config/database'
-import { Activity, Registration, User } from './models'
+import { Activity, Registration, User, Notification } from './models'
 
 dotenv.config()
 
@@ -675,6 +675,200 @@ app.delete('/api/registrations/:id', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error deleting registration:', error)
     res.status(500).json({ error: 'Failed to delete registration' })
+  }
+})
+
+// ============ NOTIFICATION ROUTES ============
+
+// Get all notifications (admin)
+app.get('/api/notifications', async (req: Request, res: Response) => {
+  try {
+    const notifications = await Notification.find().sort({ createdAt: -1 })
+    res.json({ success: true, data: notifications })
+  } catch (err: any) {
+    console.error('Error fetching notifications:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Get notifications for a specific user (based on their role and experience)
+app.get('/api/notifications/user/:email', async (req: Request, res: Response) => {
+  try {
+    const { email } = req.params
+    
+    // Find the user
+    const user = await User.findOne({ email: email.toLowerCase() })
+    if (!user) {
+      res.status(404).json({ error: 'User not found' })
+      return
+    }
+    
+    // Count completed volunteer activities for experience check
+    const volunteerRegistrations = await Registration.find({
+      email: email.toLowerCase(),
+      role: 'Volunteer',
+      attended: true
+    })
+    const isExperienced = volunteerRegistrations.length >= 5 // 5+ completed activities = experienced
+    
+    // Build query for applicable notifications
+    const now = new Date()
+    const audienceFilter: string[] = ['all']
+    
+    if (user.role === 'participant') {
+      audienceFilter.push('participants')
+    } else if (user.role === 'volunteer') {
+      audienceFilter.push('volunteers')
+      if (isExperienced) {
+        audienceFilter.push('experienced_volunteers')
+      }
+    }
+    
+    const notifications = await Notification.find({
+      targetAudience: { $in: audienceFilter },
+      $or: [
+        { expiresAt: { $exists: false } },
+        { expiresAt: null },
+        { expiresAt: { $gt: now } }
+      ]
+    }).sort({ createdAt: -1 }).limit(20)
+    
+    // Add read status to each notification
+    const notificationsWithReadStatus = notifications.map(n => ({
+      ...n.toObject(),
+      isRead: n.read.includes(user.id)
+    }))
+    
+    res.json({ 
+      success: true, 
+      data: notificationsWithReadStatus,
+      isExperiencedVolunteer: isExperienced,
+      completedActivities: volunteerRegistrations.length
+    })
+  } catch (err: any) {
+    console.error('Error fetching user notifications:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Create a new notification (admin only)
+app.post('/api/notifications', async (req: Request, res: Response) => {
+  try {
+    const { title, message, type, targetAudience, activityId, createdBy, expiresAt } = req.body
+    
+    if (!title || !message || !type || !targetAudience || !createdBy) {
+      res.status(400).json({ error: 'Title, message, type, targetAudience, and createdBy are required' })
+      return
+    }
+    
+    // Validate expiration date is in the future
+    let parsedExpiresAt = null
+    if (expiresAt) {
+      parsedExpiresAt = new Date(expiresAt)
+      if (parsedExpiresAt <= new Date()) {
+        res.status(400).json({ error: 'Expiration date must be in the future' })
+        return
+      }
+    }
+    
+    const notification = new Notification({
+      id: `notif-${Date.now()}`,
+      title,
+      message,
+      type,
+      targetAudience,
+      activityId: activityId || null,
+      createdBy,
+      expiresAt: parsedExpiresAt,
+      read: []
+    })
+    
+    await notification.save()
+    
+    res.status(201).json({ success: true, data: notification })
+  } catch (err: any) {
+    console.error('Error creating notification:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Mark notification as read
+app.post('/api/notifications/:id/read', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+    const { userId } = req.body
+    
+    if (!userId) {
+      res.status(400).json({ error: 'userId is required' })
+      return
+    }
+    
+    const notification = await Notification.findOne({ id })
+    if (!notification) {
+      res.status(404).json({ error: 'Notification not found' })
+      return
+    }
+    
+    // Add userId to read array if not already present
+    if (!notification.read.includes(userId)) {
+      notification.read.push(userId)
+      await notification.save()
+    }
+    
+    res.json({ success: true, data: notification })
+  } catch (err: any) {
+    console.error('Error marking notification as read:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Delete a notification (admin only)
+app.delete('/api/notifications/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+    
+    const notification = await Notification.findOneAndDelete({ id })
+    if (!notification) {
+      res.status(404).json({ error: 'Notification not found' })
+      return
+    }
+    
+    res.json({ success: true, message: 'Notification deleted' })
+  } catch (err: any) {
+    console.error('Error deleting notification:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Get experienced volunteers list (for admin reference)
+app.get('/api/volunteers/experienced', async (req: Request, res: Response) => {
+  try {
+    // Find all volunteers
+    const volunteers = await User.find({ role: 'volunteer' })
+    
+    // For each volunteer, count their attended activities
+    const experiencedVolunteers = []
+    for (const volunteer of volunteers) {
+      const attendedCount = await Registration.countDocuments({
+        email: volunteer.email,
+        role: 'Volunteer',
+        attended: true
+      })
+      
+      if (attendedCount >= 5) {
+        experiencedVolunteers.push({
+          id: volunteer.id,
+          name: volunteer.name,
+          email: volunteer.email,
+          completedActivities: attendedCount
+        })
+      }
+    }
+    
+    res.json({ success: true, data: experiencedVolunteers })
+  } catch (err: any) {
+    console.error('Error fetching experienced volunteers:', err)
+    res.status(500).json({ error: err.message })
   }
 })
 

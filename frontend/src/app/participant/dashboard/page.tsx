@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext'
 import { ActivityCardSkeleton } from '../../components/Skeleton'
 import CalendarGrid from '../../components/CalendarGrid'
 import ActivityModal from '../../components/ActivityModal'
+import NotificationBell from '../../components/NotificationBell'
 import { Activity } from '../../components/ActivityCard'
 
 const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
@@ -116,6 +117,96 @@ export default function ParticipantDashboard() {
   const registeredActivities = useMemo(() => {
     return activities.filter(a => registeredIds.includes(a.id))
   }, [activities, registeredIds])
+
+  // Recommended activities based on preferences and membership
+  const recommendedActivities = useMemo(() => {
+    if (!user) return []
+    
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+    
+    // Filter to this month's activities that user hasn't registered for
+    const availableThisMonth = activities.filter(a => {
+      const actDate = new Date(`${a.date}T00:00:00`)
+      return actDate >= today && actDate <= endOfMonth && !registeredIds.includes(a.id)
+    })
+    
+    // Score each activity based on preferences and membership
+    const scored = availableThisMonth.map(activity => {
+      let score = 0
+      
+      // Preference matching: +10 points for matching program
+      if (user.preferences?.includes(activity.program)) {
+        score += 10
+      }
+      
+      // Accessibility: +5 points if user needs it and activity has it
+      const needsAccessibility = user.mobilityStatus === 'cannot walk' || user.mobilityStatus === 'cannot walk long distances'
+      if (needsAccessibility && activity.wheelchairAccessible) {
+        score += 5
+      } else if (needsAccessibility && !activity.wheelchairAccessible) {
+        score -= 100 // Exclude inaccessible activities
+      }
+      
+      // Free activities get a small boost
+      if (!activity.paymentRequired) {
+        score += 2
+      }
+      
+      // Seats available boost
+      const seatsLeft = activity.participantSeatsLeft ?? activity.seatsLeft ?? 0
+      if (seatsLeft > 5) {
+        score += 3
+      } else if (seatsLeft <= 0) {
+        score -= 100 // Exclude full activities
+      }
+      
+      return { activity, score }
+    })
+    
+    // Filter out negative scores (inaccessible or full) and sort by score
+    const filtered = scored
+      .filter(s => s.score > -50)
+      .sort((a, b) => b.score - a.score)
+      .map(s => s.activity)
+    
+    // Determine how many to recommend based on membership
+    let targetCount = 1
+    switch (user.membership) {
+      case 'Weekly':
+        targetCount = 4 // ~1 per week
+        break
+      case 'Twice weekly':
+        targetCount = 8 // ~2 per week
+        break
+      case 'Three or more':
+        targetCount = 12 // ~3 per week
+        break
+      case 'Ad hoc':
+      default:
+        targetCount = 3 // A few suggestions
+    }
+    
+    // Spread recommendations across different dates
+    const dateMap = new Map<string, number>()
+    const recommendations: Activity[] = []
+    
+    for (const activity of filtered) {
+      if (recommendations.length >= targetCount) break
+      
+      const dateCount = dateMap.get(activity.date) || 0
+      // Limit 1-2 activities per day depending on membership
+      const maxPerDay = user.membership === 'Three or more' ? 2 : 1
+      
+      if (dateCount < maxPerDay) {
+        recommendations.push(activity)
+        dateMap.set(activity.date, dateCount + 1)
+      }
+    }
+    
+    return recommendations.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+  }, [activities, registeredIds, user])
 
   const handleActivityClick = (activity: Activity) => {
     setSelectedActivity(activity)
@@ -228,9 +319,19 @@ export default function ParticipantDashboard() {
               {user.membership} member • {user.mobilityStatus}
             </p>
           </div>
-          <button onClick={handleLogout} className="button outline">
-            Sign Out
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <NotificationBell 
+              userEmail={user.email} 
+              userId={user.id}
+              onActivityClick={(activityId) => {
+                const activity = activities.find(a => a.id === activityId)
+                if (activity) setSelectedActivity(activity)
+              }}
+            />
+            <button onClick={handleLogout} className="button outline">
+              Sign Out
+            </button>
+          </div>
         </div>
 
         {/* Quick Stats */}
@@ -299,6 +400,58 @@ export default function ParticipantDashboard() {
               {registeredActivities.length > 5 && (
                 <p style={{ textAlign: 'center', color: 'var(--muted)', padding: '8px', fontSize: '0.9rem' }}>
                   + {registeredActivities.length - 5} more registered activities
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Recommended Activities */}
+        {recommendedActivities.length > 0 && (
+          <div className="dashboard-section recommended-section">
+            <div className="dashboard-section-header">
+              <h2 className="dashboard-section-title">⭐ Recommended For You</h2>
+              <span style={{ color: '#92400e', fontSize: '0.9rem', fontWeight: 500 }}>
+                Based on your {user.membership?.toLowerCase() || 'ad hoc'} commitment
+              </span>
+            </div>
+            <p style={{ color: '#b45309', fontSize: '0.85rem', marginBottom: '16px' }}>
+              Activities matching your preferences: {user.preferences?.length ? user.preferences.join(', ') : 'All programs'}
+            </p>
+            
+            <div className="upcoming-list">
+              {recommendedActivities.slice(0, 6).map(activity => {
+                const dateInfo = formatUpcomingDate(activity.date)
+                const matchesPreference = user.preferences?.includes(activity.program)
+                
+                return (
+                  <button
+                    key={activity.id}
+                    className="upcoming-item recommended"
+                    onClick={() => handleActivityClick(activity)}
+                  >
+                    <div className="upcoming-date">
+                      <div className="upcoming-date-day">{dateInfo.day}</div>
+                      <div className="upcoming-date-month">{dateInfo.month}</div>
+                    </div>
+                    <div className="upcoming-info">
+                      <div className="upcoming-title">{activity.title}</div>
+                      <div className="upcoming-meta">
+                        {formatTime(activity.startTime)} - {formatTime(activity.endTime)} • {activity.location}
+                      </div>
+                    </div>
+                    <div className="upcoming-tags">
+                      <span className="upcoming-tag">{activity.program}</span>
+                      {matchesPreference && <span className="upcoming-tag match">★ Matches preferences</span>}
+                      {activity.wheelchairAccessible && <span className="upcoming-tag">♿</span>}
+                      {!activity.paymentRequired && <span className="upcoming-tag free">Free</span>}
+                    </div>
+                  </button>
+                )
+              })}
+              {recommendedActivities.length > 6 && (
+                <p style={{ textAlign: 'center', color: 'var(--muted)', padding: '8px', fontSize: '0.9rem' }}>
+                  + {recommendedActivities.length - 6} more recommendations
                 </p>
               )}
             </div>

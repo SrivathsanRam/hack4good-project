@@ -1,7 +1,9 @@
-﻿# Hack4Good Activities Hub
+﻿# Hack4Good Project MINDSTORM
+## MINDS Track 1
+MindStorm is a web application that tackles the problem:
+How might we reduce friction in activity sign-ups for both individuals and caregivers, while reducing manual effort for staff in managing and consolidating registration data?
 
-Unified scheduling for participants, volunteers, and staff with a Next.js UI
-and an Express + MongoDB API.
+
 
 ## Features
 - Shared activity calendar with role-based views (participants, volunteers, staff).

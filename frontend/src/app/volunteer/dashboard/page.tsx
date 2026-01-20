@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext'
 import { ActivityCardSkeleton } from '../../components/Skeleton'
 import CalendarGrid from '../../components/CalendarGrid'
 import ActivityModal from '../../components/ActivityModal'
+import NotificationBell from '../../components/NotificationBell'
 import { Activity } from '../../components/ActivityCard'
 
 const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
@@ -237,9 +238,19 @@ export default function VolunteerDashboard() {
             <h1 className="dashboard-title">Volunteer Dashboard 🙌</h1>
             <p className="dashboard-subtitle">Welcome, {user.name}</p>
           </div>
-          <button onClick={handleLogout} className="button outline">
-            Sign Out
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <NotificationBell 
+              userEmail={user.email} 
+              userId={user.id}
+              onActivityClick={(activityId) => {
+                const activity = activities.find(a => a.id === activityId)
+                if (activity) setSelectedActivity(activity)
+              }}
+            />
+            <button onClick={handleLogout} className="button outline">
+              Sign Out
+            </button>
+          </div>
         </div>
 
         {/* Quick Stats */}

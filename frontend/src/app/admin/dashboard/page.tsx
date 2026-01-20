@@ -203,6 +203,13 @@ export default function AdminDashboard() {
             >
               Manage Activities Calendar
             </Link>
+            <Link
+              href="/admin/notifications"
+              className="button primary"
+              style={{ padding: '8px 16px', fontSize: '0.9rem', background: 'var(--sage)' }}
+            >
+              📣 Notifications
+            </Link>
             <button
               onClick={handleLogout}
               className="button outline"

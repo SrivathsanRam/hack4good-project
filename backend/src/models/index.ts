@@ -1,6 +1,8 @@
 export { default as Activity } from './Activity'
 export { default as Registration } from './Registration'
 export { default as User } from './User'
+export { default as Notification } from './Notification'
 export type { IActivity } from './Activity'
 export type { IRegistration } from './Registration'
 export type { IUser } from './User'
+export type { INotification } from './Notification'
